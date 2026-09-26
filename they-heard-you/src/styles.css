@@ -41,6 +41,9 @@ button svg { flex-shrink: 0; width: 17px; height: 17px; stroke-width: 1.8; }
 .has-warning #outside-caption { display: none; }
 #encounter-dialogue { position: absolute; z-index: 7; bottom: 12px; right: 16px; width: min(420px, calc(100% - 32px)); max-height: calc(100% - 78px); overflow-y: auto; padding: 16px; background: #10170fed; border: 1px solid #adb49b; border-top: 3px solid var(--pink); font-size: 12px; }
 #encounter-dialogue strong { color: var(--acid); }
+.blackout canvas { visibility: hidden; }
+.blackout { background: #050505 !important; }
+.blackout .topline, .blackout .scene-bottom, .blackout #encounter-warning { visibility: hidden; }
 #encounter-dialogue p { line-height: 1.4; }
 #encounter-responses { display: grid; gap: 5px; }
 #encounter-responses button { text-align: left; justify-content: flex-start; font-size: 12px; }

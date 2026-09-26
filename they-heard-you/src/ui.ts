@@ -1,4 +1,4 @@
-import { createIcons, Armchair, ArrowLeft, ArrowRight, BedSingle, BookOpen, CookingPot, Eye, Hand, HelpCircle, Link, Maximize, MessageCircle, Pause, Play, RotateCcw, Settings, Shirt, Tv, Undo2, Utensils, Volume2, Wrench, X } from 'lucide';
+import { createIcons, Armchair, ArrowLeft, ArrowRight, Baby, BedSingle, BookOpen, CookingPot, Eye, Hand, HelpCircle, Key, KeyRound, Link, Magnet, Maximize, MessageCircle, Pause, Play, RotateCcw, Settings, Shirt, Ticket, Tv, Undo2, Utensils, Volume2, Wrench, X } from 'lucide';
 import { canVisit, inventory, isFree, type GameState, type ItemId, type Verb, type ViewId } from './state';
 import { HOTSPOTS, ITEMS, VIEWS } from './content';
 import type { Hit } from './world';
@@ -6,7 +6,7 @@ import { warning } from './encounters';
 
 export const icon = (name: string) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 export function paintIcons(): void {
-  createIcons({ icons: { Armchair, ArrowLeft, ArrowRight, BedSingle, BookOpen, CookingPot, Eye, Hand, HelpCircle, Link, Maximize, MessageCircle, Pause, Play, RotateCcw, Settings, Shirt, Tv, Undo2, Utensils, Volume2, Wrench, X } });
+  createIcons({ icons: { Armchair, ArrowLeft, ArrowRight, Baby, BedSingle, BookOpen, CookingPot, Eye, Hand, HelpCircle, Key, KeyRound, Link, Magnet, Maximize, MessageCircle, Pause, Play, RotateCcw, Settings, Shirt, Ticket, Tv, Undo2, Utensils, Volume2, Wrench, X } });
 }
 
 export class UI {
@@ -24,7 +24,7 @@ export class UI {
         <section id="viewport" aria-label="RV interior">
           <div class="film" aria-hidden="true"></div>
           <header class="topline">
-            <div class="time-label"><span>DAY 2</span><time id="clock">11:47 PM</time></div>
+            <div class="time-label"><span id="day">DAY 2</span><time id="clock">11:47 PM</time></div>
             <div class="scene-label"><span>THEY HEARD YOU</span><strong id="view-name">Your seat</strong></div>
             <div class="top-tools">
               <button id="journal" class="icon-button" title="Journal" aria-label="Open journal">${icon('book-open')}</button>
@@ -85,6 +85,7 @@ export class UI {
   }
 
   update(state: GameState, selected: ItemId | null, verb: Verb): void {
+    this.find('day').textContent = `DAY ${2 + state.knockouts}`;
     const totalMinutes = 23 * 60 + 47 + Math.floor(state.elapsed / 60);
     const hour = Math.floor(totalMinutes / 60) % 24;
     this.find('clock').textContent = `${hour % 12 || 12}:${String(totalMinutes % 60).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
@@ -112,14 +113,14 @@ export class UI {
     this.find<HTMLMeterElement>('chain-meter').value = state.bracketWork;
     this.find<HTMLMeterElement>('noise-meter').value = state.noise;
     this.find('noise-name').textContent = state.noise > 55 ? 'LOUD' : state.noise > 8 ? 'SETTLING' : 'QUIET';
-    this.find('pretend').hidden = !isFree(state) || state.view !== 'seat';
+    this.find('pretend').hidden = state.bracketWork === 0 || state.view !== 'seat';
     const message = warning(state.encounter);
     const banner = this.find('encounter-warning');
     banner.hidden = !message || state.encounter.phase === 'dialogue';
     if (banner.textContent !== message) banner.textContent = message;
     this.find('suspicion').textContent = `${state.encounter.suspicion} / 100`;
     this.viewport.classList.toggle('has-warning', Boolean(message));
-    const blocked = state.encounter.phase === 'dialogue' || state.encounter.phase === 'entering';
+    const blocked = state.encounter.phase === 'dialogue' || state.encounter.phase === 'entering' || state.encounter.phase === 'blackout' || state.encounter.phase === 'kiss';
     this.find('views').inert = blocked;
     this.find('console').inert = blocked;
     this.find('pretend').inert = blocked;

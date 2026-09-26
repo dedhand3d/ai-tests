@@ -1,10 +1,10 @@
 import './styles.css';
 import { AudioEngine } from './audio';
 import { hints, HOTSPOTS, inspect, ITEMS, OUTSIDE_LINES } from './content';
-import { canVisit, decodeSave, freshState, inventory, isFree, SAVE_KEY, transition, type Action, type GameState, type HotspotId, type ItemId, type Verb } from './state';
+import { canVisit, decodeSave, freshState, inventory, isFree, isItemId, SAVE_KEY, transition, type Action, type CabinetId, type GameState, type HotspotId, type ItemId, type RummageId, type Verb } from './state';
 import { icon, UI } from './ui';
 import { World } from './world';
-import { RESPONSES } from './encounters';
+import { RESPONSES, conversationLine, visitorName } from './encounters';
 
 const root = document.querySelector<HTMLElement>('#app')!;
 const ui = new UI(root);
@@ -18,6 +18,8 @@ let verb: Verb = 'use';
 let started = false;
 let reduced = false;
 let volume = 40;
+let voices = true;
+let voicedDialogue = '';
 let highlight = false;
 let hintLevel = 0;
 let hintStage = '';
@@ -59,47 +61,63 @@ function dispatch(action: Action): void {
   state = result.state;
   if (result.message) ui.say(result.message);
   if (result.sound) audio.play(result.sound);
+  if (action.type === 'respond' && action.response !== 'more') void audio.speak(state.encounter.outcome, visitorName(state.encounter) === 'DARLENE' ? 'Darlene' : 'Cletus');
   if (previousPhase !== 'alarm' && state.encounter.phase === 'alarm') audio.play('alarm');
   sync();
   save();
   if (!wasFree && isFree(state)) {
-    openModal(`<p class="eyebrow">THE FLOOR LET GO</p><h1 id="modal-title">Loose. Not out.</h1><p>The fitting comes away with a mouthful of rotten floor. You hold your breath. Outside, the argument carries on.</p><p>The cuff stays on. The dinette and rear bunk are now within reach. If footsteps turn toward the door, return to Your seat and conceal the fitting.</p><p class="scope-note">Cletus can now enter and inspect. The full hatch escape and endings are still not implemented.</p><button id="continue">${icon('arrow-right')}Keep looking</button>`);
+    openModal(`<p class="eyebrow">THE FLOOR LET GO</p><h1 id="modal-title">Loose. Not out.</h1><p>The fitting comes away with a mouthful of rotten floor. You hold your breath. Outside, the argument carries on.</p><p>The cuff stays on. The dinette and rear bunk are now within reach. If footsteps turn toward the door, return to Your seat and conceal the fitting.</p><p class="scope-note">Somewhere in this trailer is the key to the cuff. Watch the blinds. Do not get caught standing where you should not be.</p><button id="continue">${icon('arrow-right')}Keep looking</button>`);
     ui.find('continue').onclick = closeModal;
+  }
+  if (state.escaped) {
+    openModal(`<p class="eyebrow">THEY HEARD YOU</p><h1 id="modal-title">DITCH WATER</h1><p>The hatch gives with a scream of rust and you drop into the weeds behind the trailer. Barefoot. Cuff swinging open from your wrist like a broken watch.</p><p>Behind you, through the blinds, the light is still yellow and the TV is still talking about somebody else. You do not stop to listen. You run toward the road and do not look back until the trailer is a rumor behind you.</p><p><strong>You got out.</strong> That is the whole ending. The rest is between you and the county.</p><button id="escape-done">${icon('arrow-right')}Roll credits</button>`);
+    ui.find('escape-done').onclick = () => { state = freshState(); started = false; closeModal(); startScreen(); };
   }
 }
 
+const RUMMAGE_SET = new Set<string>(['pizza', 'trash', 'floorPapers', 'cans']);
+const CABINET_SET = new Set<string>(['cab-k1', 'cab-k2', 'cab-k3', 'cab-u1', 'cab-u2', 'cab-u3']);
+
 function interact(id: HotspotId): void {
-  if (!started || ui.dialog.open || state.encounter.phase === 'dialogue' || state.encounter.phase === 'entering') return;
+  if (!started || ui.dialog.open || state.encounter.phase === 'dialogue' || state.encounter.phase === 'entering' || state.encounter.phase === 'kiss' || state.encounter.phase === 'search' || state.escaped) return;
   if (verb === 'look') {
     ui.say(inspect(id, state));
     if (id === 'bracket') dispatch({ type: 'note', text: 'The floor fitting has a broad slot. The lock is not the weak point.' });
     if (id === 'tv') dispatch({ type: 'note', text: 'They are looking for me in Red Creek County. The TV says missing, not dead.' });
+    if (id === 'rearCab') dispatch({ type: 'note', text: 'There is a padlocked cabinet by the rear bunk. A little brass key would open it.' });
     return;
   }
-  if (verb === 'talk') { ui.say('No answer from that. The adults outside are still busy with their own grievances.'); return; }
+  if (verb === 'talk') { ui.say(id === 'ronnie' ? 'Ronnie meets your eyes and points, urgently, at the rear of the trailer. Then at his own mouth. Then he makes a locking motion. He is trying to tell you about a key.' : 'No answer from that. The adults outside are still busy with their own grievances.'); return; }
   if (verb === 'put-back') {
     if (!selected) { ui.say('Select the pocketed object you want to return.'); return; }
-    if ((selected === 'spoon' && id === 'cushion') || (selected === 'rag' && id === 'drawer')) dispatch({ type: 'return', item: selected });
-    else ui.say(`${ITEMS[selected].name} does not belong there. ${selected === 'spoon' ? 'It came from under your seat cushion.' : 'It came from the kitchen drawer.'}`);
+    dispatch({ type: 'return', item: selected });
     return;
   }
   if (verb === 'take') {
-    if (id === 'spoon' || id === 'rag') dispatch({ type: 'take', item: id });
+    if (isItemId(id)) dispatch({ type: 'take', item: id });
+    else if (id === 'belongings') dispatch({ type: 'recover' });
     else ui.say(id === 'cushion' ? 'Lift the cushion with Use. Then take what is underneath.' : id === 'drawer' ? 'Use the handle to open the drawer first.' : 'You cannot pocket that. Not with these trousers.');
     return;
   }
   if (selected) {
     if (id === 'bracket') dispatch({ type: 'work', item: selected });
+    else if (id === 'cuff') dispatch({ type: 'unlock-cuff', item: selected });
+    else if (id === 'rearCab') dispatch({ type: 'unlock-cabinet', item: selected });
     else ui.say(`The ${ITEMS[selected].name.toLowerCase()} does not help there. Nothing was used up.`);
     return;
   }
+  if (RUMMAGE_SET.has(id)) { dispatch({ type: 'rummage', spot: id as RummageId }); return; }
+  if (CABINET_SET.has(id)) { dispatch({ type: 'cabinet', cabinet: id.slice(4) as CabinetId }); return; }
   switch (id) {
     case 'drawer': dispatch({ type: 'drawer' }); break;
     case 'cushion': dispatch({ type: 'cushion' }); break;
-    case 'spoon': case 'rag': dispatch({ type: 'take', item: id }); break;
+    case 'spoon': case 'rag': case 'screwdriver': case 'brassKey': case 'finalKey': case 'magnet': case 'beenie': case 'lotto': case 'choke': dispatch({ type: 'take', item: id }); break;
+    case 'belongings': dispatch({ type: 'recover' }); break;
     case 'bracket': dispatch({ type: 'work', item: null }); break;
+    case 'cuff': dispatch({ type: 'unlock-cuff', item: null }); break;
+    case 'rearCab': dispatch({ type: 'unlock-cabinet', item: null }); break;
     case 'seat': dispatch({ type: 'conceal' }); break;
-    case 'hatch': dispatch({ type: 'rattle' }); break;
+    case 'hatch': state.cuffOpen ? dispatch({ type: 'escape' }) : dispatch({ type: 'rattle' }); break;
     default: ui.say(inspect(id, state)); break;
   }
 }
@@ -107,15 +125,19 @@ function interact(id: HotspotId): void {
 function openModal(html: string): void {
   highlight = false;
   audio.setActive(false);
+  audio.pauseVoices(true);
+  voicedDialogue = '';
   ui.showModal(html);
 }
 
 function closeModal(): void {
   ui.closeModal();
+  audio.pauseVoices(document.hidden);
   audio.setActive(started && !document.hidden);
 }
 
 async function begin(resume: boolean): Promise<void> {
+  audio.stopVoice(); voicedDialogue = '';
   if (!resume) state = freshState();
   started = true;
   selected = null;
@@ -130,7 +152,7 @@ async function begin(resume: boolean): Promise<void> {
 }
 
 function startScreen(): void {
-  openModal(`<p class="eyebrow">RED CREEK COUNTY / DAY 2</p><h1 id="modal-title" class="title">THEY<br>HEARD YOU</h1><p class="intro">Somebody outside is arguing about an amplifier.<br>Somebody inside has chained you to the floor.</p><p>You are the only one treating this as an emergency.</p><div class="modal-actions">${saved ? `<button id="resume">${icon('play')}Resume</button>` : ''}<button id="start">${icon('arrow-right')}${saved ? 'New game' : 'Open your eyes'}</button></div><p class="scope-note">First pass: RV exploration and the chain-release puzzle. Adult language, captivity, and threatening atmosphere. No escape ending yet.</p>`);
+  openModal(`<p class="eyebrow">RED CREEK COUNTY / DAY 2</p><h1 id="modal-title" class="title">THEY<br>HEARD YOU</h1><p class="intro">Somebody outside is arguing about nothing.<br>Somebody inside has chained you to the floor.</p><p>You are the only one treating this as an emergency.</p><div class="modal-actions">${saved ? `<button id="resume">${icon('play')}Resume</button>` : ''}<button id="start">${icon('arrow-right')}${saved ? 'New game' : 'Open your eyes'}</button></div><p class="scope-note">Dig through everything. Find two keys. Get out. Adult language, captivity, gross surroundings, and threatening atmosphere.</p>`);
   if (saved) ui.find('resume').onclick = () => { void begin(true); };
   ui.find('start').onclick = () => saved ? confirmRestart() : void begin(false);
 }
@@ -146,6 +168,11 @@ function pauseMenu(): void {
   save();
   openModal(`<p class="eyebrow">PAUSED</p><h1 id="modal-title">Nobody moves.</h1><div class="settings-row"><label for="volume">${icon('volume-2')}Volume</label><input id="volume" type="range" min="0" max="100" value="${volume}" /></div><label class="settings-row"><span>Reduced visual effects</span><input id="reduced" type="checkbox" ${reduced ? 'checked' : ''} /></label><p class="scope-note">${storageAvailable ? 'Progress saved in this browser.' : 'Browser storage is unavailable. Progress is not saved.'}</p><div class="modal-actions"><button id="unpause">${icon('play')}Resume</button><button id="restart">${icon('rotate-ccw')}Restart</button></div>`);
   ui.find('unpause').onclick = closeModal;
+  const voiceLabel = document.createElement('label');
+  voiceLabel.className = 'settings-row';
+  voiceLabel.innerHTML = `<span>Processed dialogue voices</span><input type="checkbox" ${voices ? 'checked' : ''}>`;
+  voiceLabel.querySelector('input')!.onchange = event => { voices = (event.target as HTMLInputElement).checked; audio.setVoiceEnabled(voices); voicedDialogue = ''; };
+  ui.modalBody.insertBefore(voiceLabel, ui.find('unpause').parentElement);
   ui.find('restart').onclick = confirmRestart;
   ui.find<HTMLInputElement>('volume').oninput = event => {
     volume = Number((event.target as HTMLInputElement).value);
@@ -259,6 +286,8 @@ function init(): void {
     save();
     stopHighlight();
     audio.setActive(started && !document.hidden && !ui.dialog.open);
+    audio.pauseVoices(document.hidden || ui.dialog.open);
+    voicedDialogue = '';
   });
   window.addEventListener('pagehide', save);
   let previous = performance.now();
@@ -267,7 +296,7 @@ function init(): void {
   function frame(now: number): void {
     const delta = Math.min((now - previous) / 1000, 0.1);
     previous = now;
-    const playing = started && !ui.dialog.open && !document.hidden && state.encounter.phase !== 'dialogue';
+    const playing = started && !ui.dialog.open && !document.hidden && state.encounter.phase !== 'dialogue' && state.encounter.phase !== 'blackout' && !state.escaped;
     audio.setActive(playing);
     if (playing) {
       const previousPhase = state.encounter.phase;
@@ -278,6 +307,7 @@ function init(): void {
       if (result.message) ui.say(result.message);
       if (state.encounter.phase === 'alarm' && previousPhase !== 'alarm') audio.play('alarm');
       if (state.encounter.phase !== previousPhase) { save(); ui.update(state, selected, verb); }
+      if (state.encounter.phase === 'approach' && previousPhase !== 'approach') void audio.speak('Hey, what the fuck was that?', 'Cletus', true);
       sceneTime += delta;
       uiElapsed += delta;
       if (uiElapsed > 0.12) {
@@ -289,6 +319,8 @@ function init(): void {
       if (state.encounter.phase === 'idle' && outsideIndex < OUTSIDE_LINES.length && state.elapsed >= OUTSIDE_LINES[outsideIndex].at) {
         const line = OUTSIDE_LINES[outsideIndex++];
         ui.caption.textContent = line.text;
+        const speaker = line.text.includes('Darlene:') ? 'Darlene' : 'Cletus';
+        void audio.speak(line.text, speaker, true);
         ui.caption.hidden = false;
         captionUntil = state.elapsed + 11;
         dispatch({ type: 'note', text: line.text });
@@ -305,10 +337,49 @@ function init(): void {
 
 function encounterDialogue(): void {
   const panel = ui.find('encounter-dialogue');
+  const name = visitorName(state.encounter);
+  if (state.encounter.phase === 'blackout' && started) {
+    if (panel.dataset.mode !== 'blackout') {
+      panel.dataset.mode = 'blackout';
+      panel.innerHTML = '<strong>BLACKOUT / +90 SECONDS</strong><p>A blow. The floor drops away. When you open your eyes, your pockets are empty and the loose belongings have been moved.</p><p>The kitchen drawer hangs open. A bundle sits inside.</p><button id="wake-up">Open your eyes</button>';
+      ui.find('wake-up').onclick = () => { dispatch({ type: 'wake' }); panel.hidden = true; panel.dataset.mode = ''; };
+    }
+    panel.hidden = false;
+    ui.viewport.classList.add('blackout');
+    return;
+  }
+  ui.viewport.classList.remove('blackout');
+  if (state.encounter.phase === 'search' && started) {
+    if (panel.dataset.mode !== 'search') {
+      panel.dataset.mode = 'search';
+      panel.innerHTML = `<strong>${name}</strong><p>She is tearing through the trailer, muttering. Not here for you. Do not move. Do not breathe loudly.</p>`;
+      panel.hidden = false;
+    }
+    return;
+  }
+  if (state.encounter.phase === 'kiss' && started) {
+    if (panel.dataset.mode !== 'kiss') {
+      panel.dataset.mode = 'kiss';
+      panel.innerHTML = '<strong>CLETUS</strong><p id="kiss-line"></p><button id="skip-kiss">Skip</button>';
+      ui.find('kiss-line').textContent = conversationLine(state.encounter);
+      ui.find('skip-kiss').onclick = () => { dispatch({ type: 'skip-kiss' }); panel.hidden = true; };
+      panel.hidden = false;
+    }
+    const line = conversationLine(state.encounter);
+    if (!ui.dialog.open && !document.hidden && voicedDialogue !== line) { voicedDialogue = line; void audio.speak(line); }
+    return;
+  }
   const visible = state.encounter.phase === 'dialogue' && started;
-  if (visible && panel.hidden) {
-    panel.innerHTML = `<strong>CLETUS</strong><p>"You getting comfortable? That wasn't the fucking arrangement."</p><p id="inspection-evidence"></p><div id="encounter-responses"></div>`;
-    ui.find('inspection-evidence').textContent = state.encounter.evidence || 'His eyes settle on the chain. He waits for an explanation.';
+  if (visible && !ui.dialog.open && !document.hidden) {
+    const line = conversationLine(state.encounter);
+    if (voicedDialogue !== line) { voicedDialogue = line; void audio.speak(line, name === 'DARLENE' ? 'Darlene' : 'Cletus'); }
+  }
+  if (!visible) voicedDialogue = '';
+  if (visible && (panel.hidden || panel.dataset.mode !== 'dialogue')) {
+    panel.dataset.mode = 'dialogue';
+    panel.innerHTML = `<strong>${name}</strong><p id="cletus-opening"></p><p id="inspection-evidence"></p><div id="encounter-responses"></div>`;
+    ui.find('cletus-opening').textContent = conversationLine(state.encounter);
+    ui.find('inspection-evidence').textContent = state.encounter.evidence || (name === 'DARLENE' ? 'She has not noticed anything yet. She is busy being furious at the concept of you.' : 'He has not noticed the fitting. He seems more concerned with the walls.');
     for (const response of RESPONSES) {
       const button = document.createElement('button');
       button.textContent = response.text;

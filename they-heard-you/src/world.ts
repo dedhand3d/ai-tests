@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { canvasTexture, dirtyTexture, lettering, seededRandom, televisionTexture } from './textures';
-import { isFree, type GameState, type HotspotId, type ViewId } from './state';
+import { hasStash, isFree, type CabinetId, type GameState, type HotspotId, type ViewId } from './state';
 import { patrolDepth } from './encounters';
 
 type Position = [number, number, number];
@@ -27,6 +27,31 @@ export class World {
   private readonly cushion = new THREE.Group();
   private readonly spoon = new THREE.Group();
   private readonly rag = new THREE.Group();
+  private readonly screwdriver = new THREE.Group();
+  private readonly belongings = new THREE.Group();
+  private readonly scuffs = new THREE.Group();
+  private readonly pizza = new THREE.Group();
+  private readonly trash = new THREE.Group();
+  private readonly floorPapers = new THREE.Group();
+  private readonly counterCans = new THREE.Group();
+  private readonly rearCab = new THREE.Group();
+  private readonly needles = new THREE.Group();
+  private readonly dildo = new THREE.Group();
+  private readonly brassKey = new THREE.Group();
+  private readonly finalKey = new THREE.Group();
+  private readonly magnet = new THREE.Group();
+  private readonly beenie = new THREE.Group();
+  private readonly lotto = new THREE.Group();
+  private readonly choke = new THREE.Group();
+  private readonly cabDoors: Record<string, THREE.Group> = {};
+  private readonly rearCabDoor = new THREE.Group();
+  private readonly rearCabLock = new THREE.Group();
+  private readonly darlene = new THREE.Group();
+  private readonly darleneLegs: THREE.Group[] = [];
+  private readonly darleneHead = new THREE.Group();
+  private readonly smoke: THREE.Sprite[] = [];
+  private readonly displacedProps: THREE.Object3D[] = [];
+  private layout = -1;
   private readonly chain = new THREE.Group();
   private readonly fitting = new THREE.Group();
   private readonly bolt = new THREE.Group();
@@ -35,6 +60,8 @@ export class World {
   private readonly cletus = new THREE.Group();
   private readonly cletusLegs: THREE.Group[] = [];
   private readonly cletusHead = new THREE.Group();
+  private readonly cletusLips = new THREE.Group();
+  private readonly kissLight = new THREE.PointLight(0xd8b78d, 0, 2, 2);
   private readonly blueLight = new THREE.PointLight(0x81acfc, 3, 4, 2);
   private state: GameState;
   private selectedView: ViewId;
@@ -73,6 +100,7 @@ export class World {
     this.buildRear();
     this.buildVisitor();
     this.buildLitter();
+    this.buildInteractives();
     this.buildLighting();
     this.applyState(state);
     this.snapCamera();
@@ -203,19 +231,25 @@ export class World {
     this.register('door', door);
     for (const edge of [-0.8, 0.35]) this.box([0.17, 2.14, 0.055], [1.71, 1.07, edge], this.metal);
     this.box([0.7, 0.08, 1.2], [2.1, -0.08, -0.225], this.dark);
-    this.sign(['RENT DUE', 'EVEN IF', 'ARRESTED'], [0.42, 0.5], [1.635, 1.65, -1.86], -Math.PI / 2);
+    this.register('wall1', this.sign(['RENT DUE', 'EVEN IF', 'ARRESTED'], [0.42, 0.5], [1.635, 1.65, -1.86], -Math.PI / 2));
     const notice = this.sign(['HOME SWEET', 'CODE', 'VIOLATION'], [0.95, 0.53], [-0.15, 2.05, 3.85], Math.PI);
     this.register('notice', notice);
-    this.sign(['DO NOT TOUCH', 'THE EMERGENCY', 'ASHTRAY'], [0.5, 0.4], [-1.67, 1.48, -2.18], Math.PI / 2);
+    this.register('wall2', this.sign(['DO NOT TOUCH', 'THE EMERGENCY', 'ASHTRAY'], [0.5, 0.4], [-1.67, 1.48, -2.18], Math.PI / 2));
     this.sign(['SHUT THE', 'FUCKING', 'DRAWER'], [0.4, 0.37], [-1.25, 1.72, -2.43]);
+    this.register('wall3', this.sign(['1. FEED RONNIE', '2. HIDE THE', 'GOOD SPOONS', '3. NO COPS'], [0.5, 0.56], [-1.68, 1.62, -0.72], Math.PI / 2));
   }
 
   private buildKitchen(): void {
     this.box([0.78, 0.89, 2.32], [-1.25, 0.46, -1.84], this.wood);
     this.box([0.93, 0.085, 2.42], [-1.2, 0.96, -1.84], new THREE.MeshStandardMaterial({ map: dirtyTexture('ceiling', 48), roughness: 0.95 }));
     for (let panel = 0; panel < 3; panel++) {
-      this.box([0.03, 0.58, 0.64], [-0.844, 0.36, -2.59 + panel * 0.75], this.wood);
-      this.box([0.075, 0.035, 0.18], [-0.803, 0.58, -2.59 + panel * 0.75], this.metal);
+      const hinge = new THREE.Group();
+      hinge.position.set(-0.86, 0.36, -2.59 + panel * 0.75 - 0.32);
+      this.scene.add(hinge);
+      this.box([0.03, 0.58, 0.64], [0, 0, 0.32], this.wood, hinge);
+      this.box([0.075, 0.035, 0.18], [0.057, 0.22, 0.52], this.metal, hinge);
+      this.cabDoors[`k${panel + 1}`] = hinge;
+      this.register(`cab-k${panel + 1}` as HotspotId, hinge);
     }
     this.box([0.58, 0.06, 0.61], [-1.24, 1.007, -2.45], this.metal);
     this.box([0.44, 0.013, 0.47], [-1.24, 1.041, -2.45], this.dark);
@@ -235,8 +269,13 @@ export class World {
     }
     this.box([0.64, 0.49, 2.29], [-1.36, 2.03, -1.84], this.wood);
     for (let panel = 0; panel < 3; panel++) {
-      this.box([0.055, 0.4, 0.67], [-1.006, 2.03, -2.56 + panel * 0.72], this.wood);
-      this.box([0.07, 0.13, 0.025], [-0.951, 1.99, -2.39 + panel * 0.72], this.metal);
+      const hinge = new THREE.Group();
+      hinge.position.set(-1.04, 2.03, -2.56 + panel * 0.72 - 0.34);
+      this.scene.add(hinge);
+      this.box([0.055, 0.4, 0.67], [0, 0, 0.34], this.wood, hinge);
+      this.box([0.07, 0.13, 0.025], [0.09, -0.04, 0.51], this.metal, hinge);
+      this.cabDoors[`u${panel + 1}`] = hinge;
+      this.register(`cab-u${panel + 1}` as HotspotId, hinge);
     }
     this.box([0.52, 0.16, 0.65], [-0.855, 0.776, -1.49], this.dark);
     this.drawer.position.set(-1.1, 0.77, -1.49);
@@ -254,10 +293,33 @@ export class World {
     }
     this.drawer.add(this.rag);
     this.register('rag', this.rag);
+    this.screwdriver.position.set(0.06, 0.06, -0.2);
+    this.box([0.13, 0.052, 0.065], [-0.045, 0, 0], this.rust, this.screwdriver);
+    this.box([0.21, 0.014, 0.022], [0.115, 0, 0], this.metal, this.screwdriver);
+    this.drawer.add(this.screwdriver);
+    this.register('screwdriver', this.screwdriver);
+    this.belongings.position.set(0.1, 0.05, 0.15);
+    this.orb([0.13, 0.06, 0.09], [0, 0, 0], ragMaterial, this.belongings);
+    this.box([0.16, 0.013, 0.015], [0, 0.052, 0], this.dark, this.belongings);
+    this.drawer.add(this.belongings);
+    this.register('belongings', this.belongings);
     for (let cap = 0; cap < 6; cap++) this.cylinder(0.028, 0.014, [-0.15 + this.random() * 0.22, -0.014, -0.2 + this.random() * 0.4], this.rust, this.drawer);
     this.cup([-1.2, 1.07, -1.16]);
-    this.can([-1.09, 1.11, -1.86], 0.11);
-    this.can([-1.38, 1.1, -1.57], 0.09);
+    this.counterCans.position.set(0, 0, 0);
+    this.scene.add(this.counterCans);
+    this.can([-1.09, 1.11, -1.86], 0.11, this.counterCans);
+    this.can([-1.38, 1.1, -1.57], 0.09, this.counterCans);
+    this.can([-1.24, 1.1, -1.7], 0.08, this.counterCans);
+    this.register('cans', this.counterCans);
+    // The awful thing on the counter. Crude set dressing. Non-explicit.
+    this.dildo.position.set(-1.16, 1.05, -1.3);
+    const awful = new THREE.MeshStandardMaterial({ color: 0x7d4a8c, roughness: 0.5 });
+    const shaft = this.cylinder(0.03, 0.2, [0, 0.1, 0], awful, this.dildo);
+    shaft.rotation.z = 0.12;
+    this.orb([0.055, 0.04, 0.055], [0, 0.01, 0], awful, this.dildo);
+    this.orb([0.035, 0.05, 0.035], [0.004, 0.21, 0], awful, this.dildo);
+    this.scene.add(this.dildo);
+    this.register('dildo', this.dildo);
     this.cylinder(0.13, 0.03, [-1.14, 1.025, -2.08], this.dark);
     this.stain([-1.2, 1.008, -1.88], [0.65, 0.5]);
   }
@@ -322,11 +384,33 @@ export class World {
     this.box([0.82, 0.06, 1.33], [-0.33, 0.85, 1.19], this.wood);
     this.cylinder(0.035, 0.82, [-0.32, 0.42, 1.19], this.metal);
     this.stain([-0.33, 0.887, 1.19], [0.78, 1.2]);
-    this.box([0.48, 0.075, 0.4], [-0.31, 0.92, 1.54], new THREE.MeshStandardMaterial({ map: lettering(['PIZZA', 'REGRETS'], '#9b8d68', '#672d2a'), roughness: 1 }));
-    const pizzaLid = this.box([0.48, 0.025, 0.39], [-0.31, 1.075, 1.73], this.wood);
+    this.pizza.position.set(-0.31, 0.92, 1.54);
+    this.scene.add(this.pizza);
+    this.box([0.48, 0.075, 0.4], [0, 0.037, 0], new THREE.MeshStandardMaterial({ map: lettering(['PIZZA', 'REGRETS'], '#9b8d68', '#672d2a'), roughness: 1 }), this.pizza);
+    const pizzaLid = this.box([0.48, 0.025, 0.39], [0, 0.155, 0.19], this.wood, this.pizza);
     pizzaLid.rotation.x = 1.15;
+    // Brass key taped under the lid, revealed by digging through the box.
+    this.brassKey.position.set(0.05, 0.145, 0.1);
+    this.box([0.012, 0.006, 0.075], [0, 0, 0.02], this.metal, this.brassKey);
+    const keyLoop = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.005, 5, 10), this.metal);
+    keyLoop.position.set(0, 0, -0.035);
+    this.brassKey.add(keyLoop);
+    this.pizza.add(this.brassKey);
+    this.register('brassKey', this.brassKey);
+    this.register('pizza', this.pizza);
     this.can([-0.52, 0.98, 0.96], 0.085);
     this.cup([-0.13, 0.96, 0.85]);
+    // Discarded needles, points up, under the bench. Set dressing, not instructions.
+    this.needles.position.set(-0.62, 0.46, 1.75);
+    const foil = new THREE.MeshStandardMaterial({ color: 0x9aa0a3, metalness: 0.8, roughness: 0.35 });
+    this.cylinder(0.09, 0.012, [0, 0, 0], foil, this.needles);
+    for (let pin = 0; pin < 5; pin++) {
+      const needle = this.cylinder(0.0035, 0.1, [(this.random() - 0.5) * 0.08, 0.05, (this.random() - 0.5) * 0.08], this.metal, this.needles, 4);
+      needle.rotation.set(this.random() * 0.5, 0, this.random() * 0.5);
+      this.box([0.008, 0.025, 0.008], [needle.position.x, -0.005, needle.position.z], new THREE.MeshStandardMaterial({ color: 0xc8b07a, roughness: 0.6 }), this.needles);
+    }
+    this.scene.add(this.needles);
+    this.register('needles', this.needles);
     const ashtray = this.cylinder(0.12, 0.03, [-0.28, 0.902, 1.13], this.dark);
     this.register('ashtray', ashtray);
     for (let butt = 0; butt < 9; butt++) {
@@ -355,7 +439,11 @@ export class World {
     this.register('tv', tv);
     this.blueLight.position.set(1.06, 1.24, 0.03);
     this.scene.add(this.blueLight);
-    this.can([1.23, 1.51, 0.65], 0.08);
+    const tvCan = new THREE.Group();
+    tvCan.position.set(0, 0, 0);
+    this.scene.add(tvCan);
+    this.can([1.23, 1.51, 0.65], 0.08, tvCan);
+    this.register('cans', tvCan);
     this.sign(['TV KEEPS', 'ME SANE'], [0.35, 0.35], [0.98, 0.43, 0.308], Math.PI);
   }
 
@@ -418,10 +506,43 @@ export class World {
     this.box([0.1, 0.03, 0.06], [0, -0.145, -0.067], this.rust, head);
     this.box([0.12, 0.035, 0.15], [0.33, 0.67, -0.05], this.dark, this.witness);
     this.cylinder(0.031, 0.018, [0.33, 0.699, -0.05], new THREE.MeshStandardMaterial({ color: 0x9c3429 }), this.witness);
+    this.register('ronnie', this.witness);
+
+    // Padlocked cabinet by the bunk: holds the final key and the smutty paperback.
+    this.rearCab.position.set(-1.28, 1.05, 2.66);
+    this.scene.add(this.rearCab);
+    this.box([0.34, 0.5, 0.36], [0, 0, 0], this.wood, this.rearCab);
+    this.rearCabDoor.position.set(-0.17, 0, -0.18);
+    this.rearCab.add(this.rearCabDoor);
+    this.box([0.32, 0.46, 0.03], [0.16, 0, 0], this.wood, this.rearCabDoor);
+    this.box([0.05, 0.02, 0.04], [0.3, 0, 0.02], this.metal, this.rearCabDoor);
+    this.rearCabLock.position.set(0.02, -0.05, -0.2);
+    this.rearCab.add(this.rearCabLock);
+    const shackle = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.008, 5, 10, Math.PI), this.metal);
+    shackle.position.set(0, 0.03, 0);
+    this.rearCabLock.add(shackle);
+    this.box([0.06, 0.08, 0.03], [0, -0.03, 0], this.metal, this.rearCabLock);
+    // Final key on a twine loop inside.
+    this.finalKey.position.set(0.04, 0.1, -0.02);
+    const bigLoop = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.007, 5, 10), this.rust);
+    this.finalKey.add(bigLoop);
+    this.box([0.016, 0.09, 0.008], [0, -0.06, 0], this.metal, this.finalKey);
+    this.box([0.04, 0.02, 0.008], [0.012, -0.1, 0], this.metal, this.finalKey);
+    this.rearCab.add(this.finalKey);
+    this.register('finalKey', this.finalKey);
+    // The purple paperback, CHOKE ON MY LOVE.
+    this.choke.position.set(-0.05, -0.12, 0.02);
+    this.choke.rotation.z = 0.3;
+    this.box([0.2, 0.03, 0.14], [0, 0, 0], new THREE.MeshStandardMaterial({ map: lettering(['CHOKE ON', 'MY LOVE'], '#7d4a8c', '#e8c8f0', 128), roughness: 1 }), this.choke);
+    this.rearCab.add(this.choke);
+    this.register('choke', this.choke);
+    this.register('rearCab', this.rearCab);
   }
 
   private buildVisitor(): void {
     this.scene.add(this.cletus);
+    this.kissLight.position.set(0.1, 1.65, -3.2);
+    this.scene.add(this.kissLight);
     const skin = new THREE.MeshStandardMaterial({ color: 0x9a8564, map: dirtyTexture('ceiling', 432), roughness: 1, flatShading: true });
     const shirt = new THREE.MeshStandardMaterial({ color: 0xafa478, map: dirtyTexture('ceiling', 634), roughness: 1 });
     const trousers = new THREE.MeshStandardMaterial({ color: 0x3f4438, map: dirtyTexture('cloth', 876), roughness: 1 });
@@ -450,6 +571,10 @@ export class World {
     }
     this.box([0.036, 0.012, 0.022], [0, 0.05, -0.147], this.metal, this.cletusHead);
     this.box([0.082, 0.035, 0.024], [0.014, -0.091, -0.11], this.dark, this.cletusHead);
+    this.cletusLips.position.set(0.014, -0.091, -0.141);
+    this.cletusHead.add(this.cletusLips);
+    const lipMaterial = new THREE.MeshStandardMaterial({ color: 0x886259, roughness: 0.93 });
+    for (const offset of [-0.009, 0.009]) this.orb([0.04, 0.009, 0.014], [0, offset, 0], lipMaterial, this.cletusLips);
     const teeth = new THREE.MeshStandardMaterial({ color: 0xa7975b, roughness: 1 });
     for (const offset of [-0.022, 0.009, 0.026]) this.box([0.012, 0.018, 0.01], [offset, -0.082, -0.126], teeth, this.cletusHead);
     for (let strand = 0; strand < 13; strand++) {
@@ -470,13 +595,78 @@ export class World {
     other.name = 'outside-neighbor';
     other.scale.set(1.23, 0.91, 1.15);
     this.scene.add(other);
+    this.buildDarlene();
   }
 
-  private can(position: Position, radius: number): void {
+  private buildDarlene(): void {
+    this.scene.add(this.darlene);
+    const skin = new THREE.MeshStandardMaterial({ color: 0x8f7a5e, map: dirtyTexture('ceiling', 555), roughness: 1, flatShading: true });
+    const cardigan = new THREE.MeshStandardMaterial({ color: 0x4a3d52, map: dirtyTexture('cloth', 313), roughness: 1 });
+    const housedress = new THREE.MeshStandardMaterial({ color: 0x6b5a3e, map: dirtyTexture('cloth', 414), roughness: 1 });
+    // Heavy, sagging torso — an old woman who has given up on everything but cigarettes.
+    this.orb([0.27, 0.32, 0.19], [0, 1.08, 0], housedress, this.darlene);
+    // Grotesque sagging chest under the stained housedress. Crude humor, non-sexualized.
+    for (const side of [-1, 1]) {
+      this.orb([0.11, 0.15, 0.09], [side * 0.13, 1.02, -0.13], housedress, this.darlene);
+      this.orb([0.09, 0.11, 0.07], [side * 0.12, 0.88, -0.15], housedress, this.darlene);
+    }
+    // Cardigan hanging open off the shoulders.
+    this.orb([0.3, 0.18, 0.21], [0, 1.28, 0.01], cardigan, this.darlene);
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Group();
+      leg.position.set(side * 0.12, 0.86, 0);
+      this.darlene.add(leg);
+      this.darleneLegs.push(leg);
+      this.cylinder(0.085, 0.7, [0, -0.36, 0], housedress, leg);
+      this.orb([0.1, 0.07, 0.16], [0, -0.76, -0.06], this.dark, leg);
+      const arm = this.cylinder(0.052, 0.56, [side * 0.3, 1.0, -0.02], cardigan, this.darlene);
+      arm.rotation.z = side * 0.1;
+      this.orb([0.05, 0.09, 0.05], [side * 0.32, 0.7, -0.02], skin, this.darlene);
+    }
+    // Head: thin gray hair, hard face.
+    this.darleneHead.position.set(0, 1.52, -0.02);
+    this.darleneHead.rotation.x = 0.06;
+    this.darlene.add(this.darleneHead);
+    this.orb([0.14, 0.19, 0.13], [0, 0, 0], skin, this.darleneHead);
+    this.orb([0.03, 0.05, 0.05], [0, -0.01, -0.13], skin, this.darleneHead);
+    const hair = new THREE.MeshStandardMaterial({ color: 0x8a8578, map: dirtyTexture('ceiling', 909), roughness: 1 });
+    for (let strand = 0; strand < 10; strand++) {
+      const angle = strand / 10 * Math.PI * 2;
+      this.orb([0.03, 0.14, 0.03], [Math.cos(angle) * 0.12, 0.1, Math.sin(angle) * 0.1 + 0.03], hair, this.darleneHead);
+    }
+    for (const side of [-1, 1]) {
+      this.orb([0.02, 0.04, 0.02], [side * 0.13, 0.0, 0], skin, this.darleneHead);
+      const glass = this.box([0.07, 0.05, 0.02], [side * 0.06, 0.03, -0.125], new THREE.MeshStandardMaterial({ color: 0x2a2a20, roughness: 0.4 }), this.darleneHead);
+      glass.rotation.z = side * 0.05;
+    }
+    this.box([0.05, 0.015, 0.02], [0, -0.09, -0.12], new THREE.MeshStandardMaterial({ color: 0x6b3a3a, roughness: 1 }), this.darleneHead);
+    // Cigarette permanently in her mouth, ember lit.
+    const cig = new THREE.Group();
+    cig.position.set(0.05, -0.075, -0.14);
+    cig.rotation.z = 0.15;
+    this.darleneHead.add(cig);
+    this.cylinder(0.008, 0.09, [0, 0, 0.03], new THREE.MeshStandardMaterial({ color: 0xd8d2c0, roughness: 0.9 }), cig).rotation.x = Math.PI / 2;
+    const ember = new THREE.Mesh(new THREE.SphereGeometry(0.011, 6, 6), new THREE.MeshStandardMaterial({ color: 0xff5a1e, emissive: 0xff3a00, emissiveIntensity: 2 }));
+    ember.position.set(0, 0, 0.08);
+    cig.add(ember);
+    const emberLight = new THREE.PointLight(0xff6a2a, 0.5, 0.5, 2);
+    emberLight.position.set(0, 0, 0.09);
+    cig.add(emberLight);
+    // Cigarette smoke sprites rising from the tip.
+    for (let puff = 0; puff < 5; puff++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x9aa0a0, transparent: true, opacity: 0, depthWrite: false }));
+      sprite.scale.set(0.1, 0.1, 0.1);
+      this.darleneHead.add(sprite);
+      this.smoke.push(sprite);
+    }
+    this.darlene.position.set(2.2, 0, 0.9);
+  }
+
+  private can(position: Position, radius: number, parent: THREE.Object3D = this.scene): void {
     const canMaterial = new THREE.MeshStandardMaterial({ color: this.random() > 0.5 ? 0x49605f : 0x8e5144, metalness: 0.36, roughness: 0.75 });
-    this.cylinder(radius * 0.47, radius * 1.5, position, canMaterial);
-    this.cylinder(radius * 0.48, 0.008, [position[0], position[1] + radius * 0.76, position[2]], this.metal);
-    this.box([radius * 0.53, radius * 0.52, 0.002], [position[0], position[1], position[2] - radius * 0.475], new THREE.MeshStandardMaterial({ color: 0xb6b297, roughness: 0.9 }));
+    this.cylinder(radius * 0.47, radius * 1.5, position, canMaterial, parent);
+    this.cylinder(radius * 0.48, 0.008, [position[0], position[1] + radius * 0.76, position[2]], this.metal, parent);
+    this.box([radius * 0.53, radius * 0.52, 0.002], [position[0], position[1], position[2] - radius * 0.475], new THREE.MeshStandardMaterial({ color: 0xb6b297, roughness: 0.9 }), parent);
   }
 
   private cup(position: Position): void {
@@ -485,6 +675,11 @@ export class World {
   }
 
   private buildLitter(): void {
+    this.scene.add(this.scuffs);
+    for (let mark = 0; mark < 6; mark++) {
+      const scrape = this.box([0.012, 0.002, 0.29], [-0.64 + mark * 0.05, 0.007, -1.7 + mark * 0.06], this.rust, this.scuffs);
+      scrape.rotation.y = 0.4;
+    }
     const paper = new THREE.MeshStandardMaterial({ map: lettering(['FINAL NOTICE', 'PAST DUE', '----------------', 'PAYMENT REQUIRED'], '#b6ab82', '#393c32', 128), roughness: 1 });
     const wrappers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, 0.017, 0.15), this.rust, 100);
     const transform = new THREE.Object3D();
@@ -500,21 +695,52 @@ export class World {
     for (let paperIndex = 0; paperIndex < 28; paperIndex++) {
       const sheet = this.box([0.17 + this.random() * 0.16, 0.004, 0.24], [(this.random() - 0.5) * 2.5, 0.026, -2.8 + this.random() * 6.5], paper);
       sheet.rotation.y = this.random() * 6;
+      this.displacedProps.push(sheet);
     }
+    // Rummageable drift of papers near the seat: overdue notices and one losing scratch ticket.
+    this.floorPapers.position.set(0, 0, 0);
+    this.scene.add(this.floorPapers);
+    for (let sheet = 0; sheet < 7; sheet++) {
+      const page = this.box([0.18 + this.random() * 0.12, 0.004, 0.25], [0.35 + this.random() * 0.5, 0.03, -2.1 + this.random() * 0.7], paper, this.floorPapers);
+      page.rotation.y = this.random() * 6;
+    }
+    this.lotto.position.set(0.55, 0.033, -1.85);
+    this.lotto.rotation.y = 0.7;
+    this.box([0.1, 0.004, 0.14], [0, 0, 0], new THREE.MeshStandardMaterial({ map: lettering(['SCRATCH', 'HERE'], '#8c2f2f', '#e8d8b0', 96), roughness: 1 }), this.lotto);
+    this.floorPapers.add(this.lotto);
+    this.register('lotto', this.lotto);
+    this.register('floorPapers', this.floorPapers);
     for (let canIndex = 0; canIndex < 20; canIndex++) {
       this.can([(this.random() - 0.5) * 2.7, 0.07, -2.7 + this.random() * 6], 0.075);
     }
     const bagMaterial = new THREE.MeshStandardMaterial({ color: 0x171c19, roughness: 0.42, flatShading: true });
+    this.trash.position.set(0, 0, 0);
+    this.scene.add(this.trash);
     for (const position of [[0.55, 0.23, 1.9], [-0.61, 0.19, 0.02], [1.4, 0.23, 2.14]] as Position[]) {
-      this.orb([0.29, 0.34, 0.3], position, bagMaterial);
-      this.orb([0.065, 0.08, 0.05], [position[0], position[1] + 0.29, position[2]], bagMaterial);
+      this.orb([0.29, 0.34, 0.3], position, bagMaterial, this.trash);
+      this.orb([0.065, 0.08, 0.05], [position[0], position[1] + 0.29, position[2]], bagMaterial, this.trash);
       this.stain([position[0], 0.004, position[2]], [0.8, 0.8]);
     }
+    this.register('trash', this.trash);
     this.box([0.35, 0.29, 0.26], [1.43, 0.15, -3.45], new THREE.MeshStandardMaterial({ color: 0xa7a28a, map: dirtyTexture('ceiling', 77), roughness: 1 }));
     this.cylinder(0.035, 0.038, [1.43, 0.31, -3.45], this.rust);
     const cablePoints = [new THREE.Vector3(1.42, 0.02, 1), new THREE.Vector3(0.52, 0.024, 0.6), new THREE.Vector3(0.11, 0.026, 1.1), new THREE.Vector3(-0.4, 0.02, 0.4), new THREE.Vector3(-1.12, 0.025, -0.3)];
     this.scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cablePoints), 30, 0.012, 5, false), this.dark));
     for (let stain = 0; stain < 15; stain++) this.stain([(this.random() - 0.5) * 2.8, 0.006, -3 + this.random() * 6.8], [0.35 + this.random(), 0.3 + this.random()]);
+  }
+
+  private buildInteractives(): void {
+    // Fridge magnet inside lower cabinet k1.
+    this.magnet.position.set(-0.95, 0.42, -2.59);
+    this.box([0.09, 0.06, 0.015], [0, 0, 0], new THREE.MeshStandardMaterial({ map: lettering(['MELT-IN-', 'MABEL\'S'], '#c8b070', '#4a3828', 96), roughness: 1 }), this.magnet);
+    this.scene.add(this.magnet);
+    this.register('magnet', this.magnet);
+    // Baby shoe inside upper cabinet u2.
+    this.beenie.position.set(-1.28, 1.99, -1.84 + 0.72 * 0);
+    this.orb([0.045, 0.035, 0.075], [0, 0, 0], new THREE.MeshStandardMaterial({ color: 0xd8c8d8, map: dirtyTexture('cloth', 233), roughness: 1 }), this.beenie);
+    this.box([0.05, 0.03, 0.03], [0, 0.025, -0.02], new THREE.MeshStandardMaterial({ color: 0xd8c8d8, roughness: 1 }), this.beenie);
+    this.scene.add(this.beenie);
+    this.register('beenie', this.beenie);
   }
 
   private buildLighting(): void {
@@ -538,9 +764,29 @@ export class World {
 
   applyState(state: GameState): void {
     this.state = state;
+    this.scuffs.visible = state.layout > 0;
+    if (this.layout !== state.layout) {
+      this.layout = state.layout;
+      const random = seededRandom(state.seed + state.layout);
+      this.displacedProps.forEach(prop => {
+        prop.position.set((random() - 0.5) * 2.4, 0.027, -2.8 + random() * 6.2);
+        prop.rotation.y = random() * Math.PI * 2;
+      });
+    }
+    this.screwdriver.visible = state.screwdriver === 'drawer' && state.drawerOpen;
+    this.belongings.visible = state.drawerOpen && hasStash(state);
     this.selectedView = state.view;
     this.spoon.visible = state.spoon === 'cushion' && state.cushionRaised;
     this.rag.visible = state.rag === 'drawer' && state.drawerOpen;
+    this.brassKey.visible = state.brassKey === 'pizza' && state.rummaged.pizza;
+    this.lotto.visible = state.lotto === 'floor' && !state.rummaged.floorPapers;
+    this.finalKey.visible = state.finalKey === 'cabinet' && state.cabinetUnlocked;
+    this.choke.visible = state.choke === 'cabinet' && state.cabinetUnlocked;
+    this.magnet.visible = state.magnet === 'cab-k1' && state.cabinets['k1'];
+    this.beenie.visible = state.beenie === 'cab-u2' && state.cabinets.u2;
+    for (const id of Object.keys(this.cabDoors)) this.cabDoors[id].rotation.y = state.cabinets[id as CabinetId] ? -1.1 : 0;
+    this.rearCabDoor.rotation.y = state.cabinetUnlocked ? -0.9 : 0;
+    this.rearCabLock.visible = !state.cabinetUnlocked;
     this.bolt.rotation.y = state.bracketWork * 0.7;
     this.bolt.position.y = 0.037 + state.bracketWork * 0.005;
     const loose = isFree(state) && !state.bracketConcealed;
@@ -548,20 +794,52 @@ export class World {
     this.fitting.rotation.y = loose ? 0.43 : 0;
     this.chain.position.y = loose ? 0.012 : 0.12;
     const encounter = state.encounter;
-    const progress = encounter.phase === 'entering' ? (4 - encounter.remaining) / 4 : encounter.phase === 'leaving' ? encounter.remaining / 5 : encounter.phase === 'dialogue' ? 1 : 0;
+    const isDarlene = encounter.visitor === 'darlene';
+    const progress = encounter.phase === 'entering' ? (4 - encounter.remaining) / 4 : encounter.phase === 'leaving' ? encounter.remaining / 5 : encounter.phase === 'dialogue' || encounter.phase === 'search' || encounter.phase === 'kiss' ? 1 : 0;
     const walk = Math.max(0, (progress - 0.25) / 0.75);
     const depth = encounter.phase === 'idle' ? patrolDepth(encounter.patrol) : encounter.phase === 'alarm' ? encounter.origin : encounter.phase === 'approach' ? THREE.MathUtils.lerp(encounter.origin, -0.225, 1 - encounter.remaining / 12) : -0.225;
-    this.cletus.position.set(THREE.MathUtils.lerp(2.25, 0.6, walk), 0, depth);
-    this.cletus.rotation.y = progress > 0 ? encounter.phase === 'leaving' ? -Math.PI / 2 : Math.PI / 2 : Math.cos(encounter.patrol * 0.48) > 0 ? Math.PI : 0;
-    if (encounter.phase === 'dialogue') this.cletus.rotation.y = 0;
+    this.cletus.visible = !isDarlene || progress === 0;
+    this.darlene.visible = isDarlene && progress > 0;
+    const active = isDarlene ? this.darlene : this.cletus;
+    const activeLegs = isDarlene ? this.darleneLegs : this.cletusLegs;
+    active.position.set(THREE.MathUtils.lerp(2.25, isDarlene ? 0.75 : 0.6, walk), 0, depth);
+    active.rotation.y = progress > 0 ? encounter.phase === 'leaving' ? -Math.PI / 2 : Math.PI / 2 : Math.cos(encounter.patrol * 0.48) > 0 ? Math.PI : 0;
+    if (encounter.phase === 'dialogue' || encounter.phase === 'search') active.rotation.y = 0;
+    if (encounter.phase === 'search') active.position.x = THREE.MathUtils.lerp(0.75, 0.2, Math.abs(Math.sin(state.elapsed * 1.5)) * 0.6);
     this.doorHinge.rotation.y = -Math.min(1, progress * 4) * 1.65;
-    const moving = encounter.phase === 'idle' || encounter.phase === 'approach' || encounter.phase === 'entering' || encounter.phase === 'leaving';
-    this.cletusLegs.forEach((leg, index) => { leg.rotation.x = moving ? Math.sin(state.elapsed * 7 + index * Math.PI) * 0.27 : 0; });
-    this.cletusHead.rotation.y = encounter.phase === 'dialogue' ? Math.sin(state.elapsed * 1.2) * 0.15 : 0;
+    const moving = encounter.phase === 'idle' || encounter.phase === 'approach' || encounter.phase === 'entering' || encounter.phase === 'leaving' || encounter.phase === 'search';
+    activeLegs.forEach((leg, index) => { leg.rotation.x = moving ? Math.sin(state.elapsed * 7 + index * Math.PI) * 0.27 : 0; });
+    this.cletusHead.rotation.y = encounter.phase === 'dialogue' && !isDarlene ? Math.sin(state.elapsed * 1.2) * 0.15 : 0;
+    this.darleneHead.rotation.y = (encounter.phase === 'dialogue' || encounter.phase === 'search') && isDarlene ? Math.sin(state.elapsed * 1.1) * 0.14 : 0;
+    this.cletusHead.rotation.x = 0;
+    this.cletusLips.scale.set(1, 1, 1);
+    this.kissLight.intensity = 0;
+    if (encounter.phase === 'kiss') {
+      const elapsed = 6 - encounter.remaining;
+      const approach = elapsed < 3 ? THREE.MathUtils.smoothstep(elapsed, 0.5, 3) : 1 - THREE.MathUtils.smoothstep(elapsed, 4, 6);
+      const lean = THREE.MathUtils.smoothstep(approach, 0.65, 1);
+      this.cletus.position.set(THREE.MathUtils.lerp(0.6, 0.37, approach), -lean * 0.24, THREE.MathUtils.lerp(-0.225, -2.72, approach));
+      this.kissLight.intensity = lean * 0.8;
+      this.cletus.rotation.y = -0.09;
+      this.cletusHead.rotation.x = -lean * 0.22;
+      this.cletusHead.rotation.y = 0;
+      this.cletusLips.scale.set(1 - lean * 0.5, 1 + lean * 0.5, 1 + lean * 1.8);
+      this.cletusLegs.forEach((leg, index) => { leg.rotation.x = approach < 0.96 ? Math.sin(elapsed * 8 + index * Math.PI) * 0.2 : 0; });
+    }
     const other = this.scene.getObjectByName('outside-neighbor')!;
     other.position.set(-2.18, 0, patrolDepth(encounter.patrol + 5));
     other.rotation.y = Math.cos((encounter.patrol + 5) * 0.48) > 0 ? Math.PI : 0;
     this.witness.rotation.z = encounter.phase === 'alarm' ? Math.sin(state.elapsed * 14) * 0.035 : encounter.agitation / 2000;
+    // Darlene's cigarette smoke, rising from the ember. Only when she is inside.
+    this.smoke.forEach((sprite, index) => {
+      const isDarlene = this.state.encounter.visitor === 'darlene';
+      if (!isDarlene) { sprite.material.opacity = 0; return; }
+      const cycle = (this.state.elapsed * 0.25 + index / this.smoke.length) % 1;
+      sprite.position.set(0.05 + cycle * 0.05, -0.075 + cycle * 0.4, -0.22 - cycle * 0.05);
+      const scale = 0.04 + cycle * 0.22;
+      sprite.scale.set(scale, scale, scale);
+      sprite.material.opacity = 0.3 * (1 - cycle);
+    });
   }
 
   setReduced(value: boolean): void { this.reduced = value; this.resize(); }
@@ -577,6 +855,7 @@ export class World {
 
   private currentShot(): { eye: Position; aim: Position; fov: number } {
     const encounter = this.state.encounter.phase;
+    if (encounter === 'kiss') return { eye: [0.35, 1.32, -3.3], aim: [0.37, 1.4, -0.3], fov: 72 };
     const view = encounter === 'entering' || encounter === 'dialogue' ? 'seat' : this.selectedView;
     const shot = CAMERAS[view];
     return view === 'seat' && this.camera.aspect < 1 ? { ...shot, aim: [1.02, 1.04, -0.3], fov: 85 } : shot;

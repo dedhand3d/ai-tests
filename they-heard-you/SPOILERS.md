@@ -12,11 +12,17 @@ This walkthrough covers only the implemented first pass. There is no full escape
 
 ## Cletus Inspection
 
+Choose Tell me more to keep Cletus talking. On the fifth continuation he approaches for a brief animated kiss, then returns to the conversation. Skip bypasses the animation. More conversation cycles through six authored topics; there is no forced ending or time penalty. Enough ends the visit and resolves any inspection evidence normally. The kiss happens at most once per visit, including after save/resume.
+
 Ronnie lies on the rear couch. Repeated rapid transitions near him or two quick uses of the broken rear hatch can startle him into an alarm. Stop moving and let his agitation settle to avoid it. The first routine inspection also starts after 95 seconds if no one has visited yet.
 
 After an alarm, outside footsteps stop; Cletus reacts and approaches. A twelve-second warning appears in every view. Close the drawer, return to Your seat, and conceal the fitting before he opens the door. Evidence is recorded at entry, so hiding afterward cannot undo what he saw.
 
-He enters and asks what you are doing. If everything looks in place, saying you shifted in the seat lets the visit end without increased suspicion. Mentioning Ronnie draws a suspicious response; defiance raises suspicion further. If he saw you away from your seat, an exposed loose chain, or the open drawer, excuses cannot erase that evidence. The first implementation is nonlethal and preserves all critical items. After his departure, a 35-second cooldown prevents a new alarm.
+Successful pretending leads to paranoid rambling rather than a chain accusation. An open drawer can still draw attention, but does not expose a successfully concealed fitting. Evidence is fixed at entry, not changed by the dialogue response.
+
+First caught chain offense: Cletus takes the spoon and refastens the chain. Open the kitchen drawer and take the screwdriver he left. Use it on the floor fitting three times to get loose again.
+
+Repeat caught chain offense: blackout, +90 seconds, next day, empty pockets, rearranged loose papers. Click Open your eyes, then open the kitchen drawer and Use the confiscated belongings bundle. Recover your screwdriver and other pocket items and loosen the fitting again. Fixed furniture and critical-item access are not randomized. Ronnie never speaks; his warning remains a nonverbal cry/buzzer.
 
 ## Drawer And Returns
 
