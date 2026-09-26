@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nightline: The Alley</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="game-shell">
+      <header class="hud">
+        <div class="title-block">
+          <p class="eyebrow">urban survival satire</p>
+          <h1>Nightline: The Alley</h1>
+        </div>
+        <div class="stats" aria-label="Game statistics">
+          <span>Cash: <strong id="cash">12</strong></span>
+          <span>Resolve: <strong id="resolve">2</strong></span>
+          <span>Trust: <strong id="trust">1</strong></span>
+          <span>Stability: <strong id="stability">1</strong></span>
+        </div>
+      </header>
+
+      <main class="game-area">
+        <section class="scene" aria-label="The city alley scene">
+          <div class="scene-glow"></div>
+
+          <button class="hotspot bench" data-loc="bench">Bench</button>
+          <button class="hotspot payphone" data-loc="payphone">Payphone</button>
+          <button class="hotspot shelter" data-loc="shelter">Shelter</button>
+          <button class="hotspot bodega" data-loc="bodega">Bodega</button>
+          <button class="hotspot alley" data-loc="alley">Alley</button>
+
+          <div class="message-box" id="messageBox">
+            <p class="tag">Night shift</p>
+            <h2 id="sceneTitle">The Alley</h2>
+            <p id="sceneText">
+              The city is still glowing over the rooftops. A few people huddle by the chain-link fence, pretending not to watch each other.
+            </p>
+          </div>
+        </section>
+
+        <aside class="sidebar">
+          <div class="panel">
+            <h3>Current Situation</h3>
+            <p id="storyText">
+              You are trying to get through one more night without the city chewing you up.
+            </p>
+          </div>
+
+          <div class="panel">
+            <h3>Choices</h3>
+            <div id="choices" class="choices"></div>
+          </div>
+
+          <div class="panel">
+            <h3>Inventory</h3>
+            <ul id="inventory" class="inventory"></ul>
+          </div>
+
+          <button id="restartButton" class="restart-button">Restart run</button>
+        </aside>
+      </main>
+    </div>
+
+    <script src="game.js"></script>
+  </body>
+</html>

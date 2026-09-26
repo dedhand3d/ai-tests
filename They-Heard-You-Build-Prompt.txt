@@ -1,0 +1,99 @@
+BUILD “THEY HEARD YOU” — COMPLETE SMALL HORROR-COMEDY GAME
+
+You are working in my VS Code workspace through OpenCode. Act as the game's developer, designer, environment artist, and dialogue writer. Implement the game in files and run it. Do not answer with a proposal, code snippets, or instructions for me to implement. Do not ask creative or technical questions; make sensible decisions and continue. Respect actual tool permissions. Preserve unrelated workspace files.
+
+This is a tightly scoped, approximately 15–25-minute first-playthrough game with a beginning, a solvable escape, failure, and an ending. My target API spend for this first build is $10, with $50 as my original overall ceiling, NOT authorization to consume $50. You cannot enforce or infer my billing balance. Be economical: one developer agent, concise tool output, no paid asset services, no runtime AI, no sprawling research, no unnecessary framework, no repeated full-file rewrites. Finish the playable core first; only add extras once it works. Do not promise a dollar cost. A working atmospheric small game is the deliverable.
+
+CREATIVE INTENT
+
+The player is kidnapped and chained inside a filthy, claustrophobic RV. Unstable adults outside argue, misplace things, get paranoid, and intermittently enter. Escape requires exploring, stealing and replacing objects, listening through the walls, manipulating their grudges, and pretending nothing happened when someone checks on you. Television reports show the search progressing; the closer authorities get, the more dangerous the captors become.
+
+This is adult horror-comedy informed by horrible lived experiences. Preserve the hostility, cruelty, profanity, bodily disgust, dread, and petty absurdity. Do not turn it into a cute spooky adventure, uplifting recovery story, therapy exercise, or quippy mascot game. The joke is how these particular people rationalize appalling behavior and enforce ridiculous household rules while committing serious crimes. Let quiet moments be genuinely frightening. Not every sentence needs a punchline.
+
+Use fictional characters. Give them specific personalities rather than making race, sexuality, disability, or addiction itself their entire joke. Some are frightening, some pathetic, some temporarily helpful; none need to become sentimental. Threats, dirty language, non-graphic violence, coercion, and grim endings are appropriate. The original cast includes a suspected child predator: if mentioned, keep him an offscreen, universally despised adult referred to as “the creep by the highway”; do not depict sexual abuse or sexual content involving minors. Children are offscreen noisy household nuisances, not drug users or targets of violence. Adult sexual jokes may be crude but need no explicit sex scenes.
+
+VISUAL TARGET
+
+Use the supplied RV mockups if available. If the attachments aren't accessible, proceed from this description without requesting them. Image 1: densely littered RV, jaundiced yellow practical lights, cold blue CRT, sagging brown upholstery, peeling wood veneer, suspicious face leaning around doorway. Image 2: realistic cramped trailer composition plus garish homemade 1990s inventory/verb UI, checkerboard scraps, acid green/hot pink/yellow accents. Borrow spatial density and mood, not every prop. Do not paste a reference image behind invisible buttons and call it 3D.
+
+Aim for a late-1990s PC adventure: real low-poly 3D geometry, painted low-resolution textures, dirty baked-looking shadows, restrained dithering/grain, crunchy silhouettes, readable closeups. Not smooth bright default primitives. Distinct ugly human faces, clothes, hair, and postures matter more than fancy animation. Cheap modeled heads can use original procedural face textures and exaggerated asymmetry. Characters must not be featureless capsules. Use simple head turns, breathing, jaw motion, and doorway movement. No external generation API is required.
+
+Build one continuous RV interior with 4–5 fixed camera viewpoints: chain/floor and entry; kitchenette/drawers; dinette/CRT/window; rear bunk/tool area; optional closeup camera. Click arrows or visible destinations to change viewpoint. No WASD FPS movement, no pointer lock, no physics simulation of loose trash. While chained, limit navigation to reachable views. After release, unlock the other views. Build the outside as light, silhouettes, sound, and a tiny ending view rather than another explorable level.
+
+Clutter should be layered but interaction targets readable: ashtrays, stained cups, rotten panel seams, paper flyers, broken blinds, screwdriver handles, dirty dishes, trash bags, extension cables, hand-lettered threats. Use repeated instanced props where useful. Add a few original signs: “HOME SWEET CODE VIOLATION,” “DO NOT TOUCH THE EMERGENCY ASHTRAY,” “RENT DUE EVEN IF ARRESTED.” Avoid covering every inch with jokes.
+
+TECHNICAL SCOPE
+
+Inspect the workspace briefly. Extend a suitable existing project; otherwise use Vite, TypeScript, Three.js, and a simple HTML/CSS overlay. Pin installed dependencies with a lockfile. No backend, accounts, online services, React unless already present, or paid assets. Use npm scripts for dev/build/test. The game must run locally in a desktop browser on Windows after npm install and npm run dev, with production build support. Use generated textures, original procedural meshes, and synthesized Web Audio so missing downloads cannot block completion. Initialize sound on the start button. Never rely on CDN assets at runtime.
+
+Keep modules small: state/persistence, interaction/inventory, world rendering, encounters/dialogue, audio, UI. Store puzzles and dialogue as data with stable IDs. One authoritative game state; rendering derives from it. Save versioned state, RNG seed, timers, inventory, world placements, and puzzle flags in localStorage. Resume, restart confirmation, volume, reduced visual effects, and fullscreen controls. Pause timers in menus and when the tab is hidden. Stop input leaking through UI into world clicks.
+
+CONTROLS AND UI
+
+Left-click inspect/interact; select inventory then click a hotspot to use it. Provide Look, Take, Use, Talk, and Put Back through a compact verb bar or context actions. Right-click/Escape cancels item selection. Click-to-use must work without dragging. Closed drawers visibly open; taking objects removes them; returned props reappear. Display hotspot names and short useful failure text. Include a hold-to-highlight option and a three-level optional hint per current puzzle. Text must remain crisp above the low-resolution scene render.
+
+HUD: day/time, sleep debt, suspicion, police search stage, inventory. Addiction/craving appears only after accepting a fictional stimulant. Do not clutter the screen with developer diagnostics. Inventory should support at least 10 visible/scrollable items. A journal records overheard clues in the player's blunt voice without automatically solving puzzles.
+
+MAIN ESCAPE — IMPLEMENT THIS COMPLETE DEPENDENCY GRAPH
+
+1. GET LOOSE. From the initial position, find a spoon under the cushion. Inspect the corroded floor bracket: its slotted bolt and spoon fit provide the clue. Three short work actions loosen the bracket, each generating noise. Release the chain from the floor, leaving the cuff on. No real-world lock-picking tutorial. Keep the bracket and chain visually placeable back in their original position. “Pretend restrained” is always accessible at the original seat during entry warnings; it only fools an inspection if you returned there and concealed the loosened fitting.
+
+2. WIN OVER THE WITNESS. Ronnie, a nonspeaking adult in a chair near the rear, can alert the others with a call buzzer. His eyes and hand movements communicate clear needs. Give water from a sealed bottle and move an ashtray out of his reach. Trust unlocks a deliberate glance toward the drawer holding the screwdriver. Ignoring him is possible, but careless loud activity near him can trigger a visit. Never require harming him. He has agency: he may assist, warn, refuse, or call for help. Disability is not the punchline.
+
+3. BORROW THE TOOLS. The screwdriver opens a decorative interior service panel in a simple adventure abstraction. Inside are a dead spare battery, a working battery, and a labeled replacement pull handle. Tinker owns the screwdriver and soon announces that he needs it. Borrowing versus permanent taking are separate states: return it to its outlined storage spot before inspection. Every required borrowed item has an explicit Put Back action and a known original location.
+
+4. CREATE AN OUTSIDE DISTRACTION. Read a crumpled pawn receipt and overhear that Dale's amp disappeared. Discover that Mom pawned it and hid the claim stub. Tell Dale enough truthful detail to start an argument outside. The diversion produces a guaranteed, clearly signaled 75-second safe work window, not a random chance. If missed, replay the confrontation through another earned dialogue option; never permanently lock the game.
+
+5. PREPARE THE EXIT. The rear emergency hatch has an internally broken release, established by inspection. Use the replacement pull handle on its clearly matching mount, secure it with the borrowed screwdriver, and pad the rattling trim with a rag. These are fictional click-to-fit operations, not detailed real-world sabotage. The player can prepare it in several visits; completed work persists. The last noisy action needs the distraction or risks a visit. Return the screwdriver afterward. The hatch becomes the physical escape route.
+
+6. CHOOSE HOW TO LEAVE. Escape through the repaired hatch during an outside distraction for the “Ditch Water” ending. For the rescue ending, also power the hidden prepaid phone with the working battery, obtain the location from the tow invoice behind the CRT, and call for help. Show an abstract conversation, not actual emergency dialing. The call advances the police stage and starts a dangerous final wait. Hide at the initial seat through one last inspection, then signal from the window when blue lights arrive. Different ending text if Ronnie trusts you: you give responders his location. No extra explorable rescue sequence required.
+
+All critical objects are guaranteed, discoverable, and available before their uses. Never consume a unique item on a failed combination. Any optional alternate route must not replace the completed main route. Do not invent a puzzle that depends on unexplained pixel hunting or repeatedly trying every item.
+
+ENCOUNTERS AND CAST
+
+Implement five on-screen recurring adults with distinct silhouettes and simple animations. Use additional names as outside voices/text rather than building fifteen models.
+
+MOM / DARLENE: household authority. Cardigan, oversized shirt, cigarette, furious belief that she is being disrespected. She inspects drawers and demands explanations. Calmly acknowledge a petty rule or blame an established outside disturbance to de-escalate; accusing her of kidnapping spikes suspicion. Repeated identical excuses stop working.
+Example: “I don't care who chained you to what. That drawer was shut.”
+Example: “We have company. Sit there like you weren't raised in a ditch.”
+
+STARSHINE / CLETUS: lanky, stained sleeveless shirt, cheap sunglasses, malicious morning cheerfulness. After a knockout, a brief first-person scene implies him urinating on the player via sound, wet floor, and camera framing, with no genitals shown. He says, “Good morning, starshine. The earth says hello,” laughs, and slams the door. Keep it nasty and brief, not a fetish scene or prolonged cinematic. Subsequent repetitions can be skipped.
+
+DALE / THE JUGGALO: missing amp, smeared face paint, loud vest, aggrieved loyalty code. Can be set against Mom through evidence. Friendly until you contradict his personal mythology.
+Example: “That amp's family. You are currently more of a paperwork issue.”
+
+TINKER / RAY: grease-stained mechanic rebuilding a motorcycle that has not moved in years. Counts his tools; values someone remembering where things belong. Helpful when treated as competent, furious when his screwdriver goes missing.
+Example: “It's not broken. It's waiting on one part. Been waiting since 2009.”
+
+RONNIE: the witness described above. Distinct readable expressions, gaze clues, buzzer, trust, and quiet assistance. No spoken dialogue needed.
+
+Outside cameos: cowboy “Warrant” Wes; gay hustler Vince whose wit and constant scams define him; Black neighbor Curtis who is obsessed with recovering his stolen generator; older cat-hoarder Bev; self-appointed philosopher Dennis; an endlessly bickering adult couple. Each gets 2–3 short lines if time permits. No accent caricatures required. The children yell outside and bang on the wall; redirect them by passing out a pack of cheap stickers through the window. This is optional noise control, never a required harm mechanic.
+
+Dialogue must have consequences. For each speaking core NPC write at least 3 short encounters with 3 responses and at least 2 materially different outcomes per encounter. Include prerequisites, trust/suspicion changes, clue reveals, and repeat variants. Responses must be inferable from personality, observations, or clues; no arbitrary lethal trivia. Put actual finished dialogue in the game. No lorem ipsum, empty branches, “TODO write dialogue,” or a runtime language model. Keep exchanges short and unpleasantly believable.
+
+TIME, NOISE, AND FAIRNESS
+
+Use a compressed approximately 22-minute deadline. A full run can finish earlier. First visit is scripted tutorial tension; no lethal event in the first 90 seconds. Outside arrivals get spatial footsteps, a door rattle, AND readable directional captions 12 seconds before entry. Captions replace missing voice assets. Never make audio mandatory. Only one active NPC encounter at a time.
+
+Noise adds temporary risk; suspicion is persistent. Opening a drawer is quiet, forcing a bracket is loud, leaving owned objects missing matters. NPC inspections check specific relevant objects, not omniscient player inventory. Close-up views do not hide entry warnings. Pausing and reading dialogue suspend the main timer; entry countdowns run during free exploration only. No punishment for reading speed.
+
+Sleep debt rises over time. High debt causes subdued visual symptoms and a warned blackout. A short safe rest lowers it but advances the deadline. A clearly labeled fictional stimulant gives an immediate temporary benefit with later rebound debt and craving; no real drug names, recipes, or doses. One use does not instantly create permanent addiction. Repeated use unlocks a bleak voluntary “Just One More Day” stay-behind ending, with an explicit final choice rather than a surprise forced ending.
+
+Knockout: add a visible time penalty, advance day label, and move a few loose props using seeded legal placements. Persist completed puzzle work and pocketed critical items. Provide scuff marks/open containers as relocation clues. Never place required items behind their own puzzle gates. Two survivable knockouts; a third or the final deadline produces a brief non-graphic fatal ending. Clearly warn when the captors are close to that threshold. Offer retry from a meaningful checkpoint and full restart.
+
+TV search has 4 authored stages: missing-person report; county search; vehicle description; nearby police. Display actual evolving text and short static transitions. Calling for help accelerates progress but also the final inspection. Passive TV progression alone must not falsely promise an automatic rescue.
+
+AUDIO AND PRESENTATION
+
+Layer generator hum, electrical buzz, distant arguments represented by captions, intermittent footsteps, cabinet creaks, chain rattle, insects, and occasional sudden silence. Use synthesized/procedural effects where assets are absent. Do not substitute goofy default text-to-speech. Door slams should startle without deafening. Sparse original drones, not a constant comedy soundtrack. Add a short start screen, immediate playable opening, and distinct illustrated-in-engine/text ending panels. No marketing trailer: “build the trailer” means construct the RV environment.
+
+EXECUTION ORDER AND STOP RULE
+
+Briefly inspect; write a short implementation checklist; then implement immediately. First achieve start → inspect → inventory → chain release → one inspection → hatch escape. Then add the remaining puzzle steps, NPC dialogue, fail/retry, save/resume, rescue ending, and visual/audio polish. Optional cameos and extra variants come last. Do not spend the budget on a design essay, a generic engine, hundreds of tests, or photorealism experiments. Do not spawn other agents.
+
+Verify with a production build and focused state tests for the actual risks: successful main escape, rescue prerequisites, inspection detecting a missing owned object, returned-object acceptance, blackout preserving reachability, save/resume consistency, and terminal states stopping timers. If browser tools exist, run an actual start-to-escape smoke test and inspect the opening scene for obvious clipping, unreadable text, invisible hotspots, and broken controls. Fix concrete blockers without expanding scope. Do not claim visual or playthrough testing you could not perform.
+
+Deliver runnable source, lockfile, README with exact Windows-friendly launch commands, and a separate SPOILERS.md containing a complete walkthrough. Include a hidden developer mode for advancing encounters and viewing flags, off by default. The player should not see a development dashboard.
+
+End your response concisely with what is playable, how to launch, verification performed, and real limitations. Do not say the game is complete if a win condition or required puzzle is missing. Build it now without asking questions.
