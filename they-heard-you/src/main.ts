@@ -1,10 +1,17 @@
 import './styles.css';
 import { AudioEngine } from './audio';
 import { hints, HOTSPOTS, inspect, ITEMS, OUTSIDE_LINES } from './content';
-import { canVisit, decodeSave, freshState, inventory, isFree, isItemId, SAVE_KEY, transition, type Action, type CabinetId, type GameState, type HotspotId, type ItemId, type RummageId, type Verb } from './state';
+import { canVisit, decodeSave, freshState, inventory, isFree, isItemId, SAVE_KEY, transition, type Action, type CabinetId, type GameState, type HotspotId, type ItemId, type Verb } from './state';
 import { icon, UI } from './ui';
 import { World } from './world';
-import { RESPONSES, conversationLine, visitorName } from './encounters';
+import { DANCE_LINES, DANCE_SECONDS, RESPONSES, conversationLine, danceBeat, visitorName, warning } from './encounters';
+import { scripted } from './interactions';
+import { openInspector } from './inspect3d';
+import { DANCE_SONG_START } from './midi';
+
+const SONG_URL = `${import.meta.env.BASE_URL}sounds/goodbye-horses.mid`;
+const LOCKED_PHASES = new Set(['dialogue', 'entering', 'kiss', 'search', 'dance']);
+let closeInspector: (() => void) | null = null;
 
 const root = document.querySelector<HTMLElement>('#app')!;
 const ui = new UI(root);
@@ -61,6 +68,7 @@ function dispatch(action: Action): void {
   state = result.state;
   if (result.message) ui.say(result.message);
   if (result.sound) audio.play(result.sound);
+  if (result.vomit) ui.vomit();
   if (action.type === 'respond' && action.response !== 'more') void audio.speak(state.encounter.outcome, visitorName(state.encounter) === 'DARLENE' ? 'Darlene' : 'Cletus');
   if (previousPhase !== 'alarm' && state.encounter.phase === 'alarm') audio.play('alarm');
   sync();
@@ -70,59 +78,98 @@ function dispatch(action: Action): void {
     ui.find('continue').onclick = closeModal;
   }
   if (state.escaped) {
-    openModal(`<p class="eyebrow">THEY HEARD YOU</p><h1 id="modal-title">DITCH WATER</h1><p>The hatch gives with a scream of rust and you drop into the weeds behind the trailer. Barefoot. Cuff swinging open from your wrist like a broken watch.</p><p>Behind you, through the blinds, the light is still yellow and the TV is still talking about somebody else. You do not stop to listen. You run toward the road and do not look back until the trailer is a rumor behind you.</p><p><strong>You got out.</strong> That is the whole ending. The rest is between you and the county.</p><button id="escape-done">${icon('arrow-right')}Roll credits</button>`);
+    openModal(`<p class="eyebrow">THEY HEARD YOU</p><h1 id="modal-title">DITCH WATER</h1><p>The third swing splits the plywood down the middle and you go through the door shoulder first, axe still in your hand, into cold air and a yard full of lawn chairs. Barefoot. The open cuff swinging from your ankle like a broken watch.</p><p>Somebody drops a Zwinkys. Somebody yells your name wrong. Nobody follows a person holding an axe. You run toward the road and do not look back until the trailer is a rumor behind you.</p><p><strong>You got out.</strong> That is the whole ending. The rest is between you and the county.</p><button id="escape-done">${icon('arrow-right')}Roll credits</button>`);
     ui.find('escape-done').onclick = () => { state = freshState(); started = false; closeModal(); startScreen(); };
   }
 }
 
-const RUMMAGE_SET = new Set<string>(['pizza', 'trash', 'floorPapers', 'cans']);
 const CABINET_SET = new Set<string>(['cab-k1', 'cab-k2', 'cab-k3', 'cab-u1', 'cab-u2', 'cab-u3']);
 
 function interact(id: HotspotId): void {
-  if (!started || ui.dialog.open || state.encounter.phase === 'dialogue' || state.encounter.phase === 'entering' || state.encounter.phase === 'kiss' || state.encounter.phase === 'search' || state.escaped) return;
+  if (!started || ui.dialog.open || LOCKED_PHASES.has(state.encounter.phase) || state.escaped) return;
   if (verb === 'look') {
-    ui.say(inspect(id, state));
+    ui.say(scripted(id, 'look', state) ?? inspect(id, state));
     if (id === 'bracket') dispatch({ type: 'note', text: 'The floor fitting has a broad slot. The lock is not the weak point.' });
     if (id === 'tv') dispatch({ type: 'note', text: 'They are looking for me in Red Creek County. The TV says missing, not dead.' });
-    if (id === 'rearCab') dispatch({ type: 'note', text: 'There is a padlocked cabinet by the rear bunk. A little brass key would open it.' });
+    if (id === 'rearCab') dispatch({ type: 'note', text: 'There is a padlocked cabinet by the rear bunk. The padlock is cheap. Something thin could pick it.' });
     return;
   }
-  if (verb === 'talk') { ui.say(id === 'ronnie' ? 'Ronnie meets your eyes and points, urgently, at the rear of the trailer. Then at his own mouth. Then he makes a locking motion. He is trying to tell you about a key.' : 'No answer from that. The adults outside are still busy with their own grievances.'); return; }
+  if (verb === 'talk') { ui.say(id === 'ronnie' ? 'Ronnie does not answer. Either he is asleep, or he is ignoring you with real commitment.' : 'No answer from that. The adults outside are still busy with their own grievances.'); return; }
   if (verb === 'put-back') {
     if (!selected) { ui.say('Select the pocketed object you want to return.'); return; }
     dispatch({ type: 'return', item: selected });
     return;
   }
-  if (verb === 'take') {
-    if (isItemId(id)) dispatch({ type: 'take', item: id });
-    else if (id === 'belongings') dispatch({ type: 'recover' });
-    else ui.say(id === 'cushion' ? 'Lift the cushion with Use. Then take what is underneath.' : id === 'drawer' ? 'Use the handle to open the drawer first.' : 'You cannot pocket that. Not with these trousers.');
-    return;
-  }
-  if (selected) {
-    if (id === 'bracket') dispatch({ type: 'work', item: selected });
-    else if (id === 'cuff') dispatch({ type: 'unlock-cuff', item: selected });
-    else if (id === 'rearCab') dispatch({ type: 'unlock-cabinet', item: selected });
-    else ui.say(`The ${ITEMS[selected].name.toLowerCase()} does not help there. Nothing was used up.`);
-    return;
-  }
-  if (RUMMAGE_SET.has(id)) { dispatch({ type: 'rummage', spot: id as RummageId }); return; }
-  if (CABINET_SET.has(id)) { dispatch({ type: 'cabinet', cabinet: id.slice(4) as CabinetId }); return; }
-  switch (id) {
-    case 'drawer': dispatch({ type: 'drawer' }); break;
-    case 'cushion': dispatch({ type: 'cushion' }); break;
-    case 'spoon': case 'rag': case 'screwdriver': case 'brassKey': case 'finalKey': case 'magnet': case 'beenie': case 'lotto': case 'choke': dispatch({ type: 'take', item: id }); break;
-    case 'belongings': dispatch({ type: 'recover' }); break;
-    case 'bracket': dispatch({ type: 'work', item: null }); break;
-    case 'cuff': dispatch({ type: 'unlock-cuff', item: null }); break;
-    case 'rearCab': dispatch({ type: 'unlock-cabinet', item: null }); break;
-    case 'seat': dispatch({ type: 'conceal' }); break;
-    case 'hatch': state.cuffOpen ? dispatch({ type: 'escape' }) : dispatch({ type: 'rattle' }); break;
-    default: ui.say(inspect(id, state)); break;
-  }
+  if (verb === 'take') { grab(id); return; }
+  if (selected) { useItemOn(selected, id); return; }
+  useHotspot(id);
 }
 
+function grab(id: HotspotId): void {
+  const line = scripted(id, 'take', state);
+  if (line) { ui.say(line); return; }
+  switch (id) {
+    case 'belongings': dispatch({ type: 'recover' }); return;
+    case 'cans': dispatch({ type: 'take', item: 'zwinkys' }); return;
+    case 'ashtray': dispatch({ type: 'take-ashtray' }); return;
+    case 'pizzaRear': dispatch({ type: 'take', item: 'usedNeedles' }); return;
+    case 'cushion': if (state.cushionRaised && state.spoon === 'cushion') dispatch({ type: 'take', item: 'spoon' }); else ui.say('I wonder what\'s under the cushions'); return;
+    case 'rearCab': {
+      const inside = (['axe', 'finalKey', 'choke'] as const).find(item => state[item] === 'cabinet');
+      if (inside) dispatch({ type: 'take', item: inside }); else ui.say('Nothing left in there but the smell.');
+      return;
+    }
+    case 'drawer': ui.say('Use the handle to open the drawer first.'); return;
+  }
+  if (isItemId(id)) dispatch({ type: 'take', item: id });
+  else ui.say('You cannot pocket that. Not with these trousers.');
+}
+
+function useItemOn(item: ItemId, id: HotspotId): void {
+  switch (id) {
+    case 'bracket': dispatch(item === 'finalKey' ? { type: 'unlock-cuff', item } : { type: 'work', item }); return;
+    case 'cuff': dispatch({ type: 'unlock-cuff', item }); return;
+    case 'rearCab': dispatch({ type: 'unlock-cabinet', item }); return;
+    case 'door': dispatch({ type: 'chop', item }); return;
+    case 'ronnie': dispatch({ type: 'give-ronnie', item }); return;
+  }
+  ui.say(`The ${ITEMS[item].name.toLowerCase()} does not help there. Nothing was used up.`);
+}
+
+function useHotspot(id: HotspotId): void {
+  const line = scripted(id, 'use', state);
+  if (line) { ui.say(line); return; }
+  if (CABINET_SET.has(id)) { dispatch({ type: 'cabinet', cabinet: id.slice(4) as CabinetId }); return; }
+  switch (id) {
+    case 'drawer': dispatch({ type: 'drawer' }); return;
+    case 'cushion': dispatch({ type: 'cushion' }); return;
+    case 'belongings': dispatch({ type: 'recover' }); return;
+    case 'bracket': dispatch({ type: 'work', item: null }); return;
+    case 'cuff': dispatch({ type: 'unlock-cuff', item: null }); return;
+    case 'rearCab': dispatch({ type: 'unlock-cabinet', item: null }); return;
+    case 'door': dispatch({ type: 'chop', item: null }); return;
+    case 'seat': dispatch({ type: 'conceal' }); return;
+    case 'hatch': dispatch({ type: 'rattle' }); return;
+    case 'cans': dispatch({ type: 'drink' }); return;
+    case 'spoon': case 'rag': case 'screwdriver': case 'finalKey': case 'magnet': case 'beenie': case 'choke': case 'axe': dispatch({ type: 'take', item: id }); return;
+  }
+  ui.say(scripted(id, 'look', state) ?? inspect(id, state));
+}
+
+function examine(item: ItemId): void {
+  openModal(`<p class="eyebrow">EXAMINE</p><h1 id="modal-title"></h1><div id="inspect-view" class="inspect-view"></div><p class="inspect-help">Drag to turn it over. Scroll or pinch to zoom.</p><p id="inspect-text"></p><div class="modal-actions"><button id="inspect-close">${icon('arrow-left')}Back</button>${item === 'zwinkys' ? `<button id="inspect-drink">${icon('beer')}Drink</button>` : ''}</div>`);
+  ui.find('modal-title').textContent = ITEMS[item].name;
+  ui.find('inspect-text').textContent = ITEMS[item].description;
+  closeInspector = openInspector(ui.find('inspect-view'), world.itemModel(item));
+  ui.find('inspect-close').onclick = closeModal;
+  if (item === 'zwinkys') ui.find('inspect-drink').onclick = () => { closeModal(); dispatch({ type: 'drink' }); };
+}
+
+function disposeInspector(): void { closeInspector?.(); closeInspector = null; }
+
 function openModal(html: string): void {
+  disposeInspector();
+  world.setHover(null);
   highlight = false;
   audio.setActive(false);
   audio.pauseVoices(true);
@@ -131,6 +178,7 @@ function openModal(html: string): void {
 }
 
 function closeModal(): void {
+  disposeInspector();
   ui.closeModal();
   audio.pauseVoices(document.hidden);
   audio.setActive(started && !document.hidden);
@@ -152,7 +200,7 @@ async function begin(resume: boolean): Promise<void> {
 }
 
 function startScreen(): void {
-  openModal(`<p class="eyebrow">RED CREEK COUNTY / DAY 2</p><h1 id="modal-title" class="title">THEY<br>HEARD YOU</h1><p class="intro">Somebody outside is arguing about nothing.<br>Somebody inside has chained you to the floor.</p><p>You are the only one treating this as an emergency.</p><div class="modal-actions">${saved ? `<button id="resume">${icon('play')}Resume</button>` : ''}<button id="start">${icon('arrow-right')}${saved ? 'New game' : 'Open your eyes'}</button></div><p class="scope-note">Dig through everything. Find two keys. Get out. Adult language, captivity, gross surroundings, and threatening atmosphere.</p>`);
+  openModal(`<p class="eyebrow">RED CREEK COUNTY / DAY 2</p><h1 id="modal-title" class="title">THEY<br>HEARD YOU</h1><p class="intro">Somebody outside is arguing about nothing.<br>Somebody inside has chained you to the floor.</p><p>You are the only one treating this as an emergency.</p><div class="modal-actions">${saved ? `<button id="resume">${icon('play')}Resume</button>` : ''}<button id="start">${icon('arrow-right')}${saved ? 'New game' : 'Open your eyes'}</button></div><p class="scope-note">Dig through everything. Get the cuff off. Get out. Adult language, captivity, gross surroundings, and threatening atmosphere.</p>`);
   if (saved) ui.find('resume').onclick = () => { void begin(true); };
   ui.find('start').onclick = () => saved ? confirmRestart() : void begin(false);
 }
@@ -241,7 +289,7 @@ function init(): void {
     const button = (event.target as Element).closest<HTMLButtonElement>('button[data-item]');
     if (!button) return;
     const item = button.dataset.item as ItemId;
-    if (verb === 'look') { ui.say(ITEMS[item].description); return; }
+    if (verb === 'look') { examine(item); return; }
     selected = selected === item ? null : item;
     if (verb !== 'put-back') verb = 'use';
     sync();
@@ -253,7 +301,8 @@ function init(): void {
   });
   canvas.addEventListener('pointermove', event => {
     if (ui.dialog.open || !started) return;
-    const hit = world.pick(event.clientX, event.clientY);
+    const hit = LOCKED_PHASES.has(state.encounter.phase) ? null : world.pick(event.clientX, event.clientY);
+    world.setHover(hit);
     canvas.style.cursor = hit ? 'pointer' : 'default';
     ui.tooltip.hidden = !hit;
     if (!hit) return;
@@ -262,7 +311,7 @@ function init(): void {
     ui.tooltip.style.left = `${Math.max(8, Math.min(event.clientX - rect.left + 16, rect.width - Math.min(270, rect.width - 16)))}px`;
     ui.tooltip.style.top = `${Math.max(70, Math.min(event.clientY - rect.top + 14, rect.height - 64))}px`;
   });
-  canvas.addEventListener('pointerleave', () => { ui.tooltip.hidden = true; });
+  canvas.addEventListener('pointerleave', () => { ui.tooltip.hidden = true; world.setHover(null); });
   canvas.addEventListener('contextmenu', event => { event.preventDefault(); cancelSelection(); });
   const highlightButton = ui.find('highlight');
   highlightButton.addEventListener('pointerdown', event => {
@@ -308,6 +357,8 @@ function init(): void {
       if (state.encounter.phase === 'alarm' && previousPhase !== 'alarm') audio.play('alarm');
       if (state.encounter.phase !== previousPhase) { save(); ui.update(state, selected, verb); }
       if (state.encounter.phase === 'approach' && previousPhase !== 'approach') void audio.speak('Hey, what the fuck was that?', 'Cletus', true);
+      if (state.encounter.phase === 'leaving' && previousPhase === 'dance') void audio.speak(state.encounter.outcome);
+      if (state.encounter.phase === 'entering' && previousPhase !== 'entering') ui.jolt();
       sceneTime += delta;
       uiElapsed += delta;
       if (uiElapsed > 0.12) {
@@ -327,6 +378,11 @@ function init(): void {
       }
       if (state.elapsed > captionUntil || state.encounter.phase !== 'idle') ui.caption.hidden = true;
     }
+    // Goodbye Horses, from the peak, for exactly as long as the dance lasts. Restarts in place after a pause.
+    const dancing = playing && state.encounter.phase === 'dance';
+    if (dancing && !audio.musicPlaying) void audio.playMusic(SONG_URL, DANCE_SONG_START + DANCE_SECONDS - state.encounter.remaining, state.encounter.remaining + 0.6);
+    else if (!dancing && audio.musicPlaying) audio.stopMusic();
+    if (LOCKED_PHASES.has(state.encounter.phase)) { world.setHover(null); ui.tooltip.hidden = true; }
     encounterDialogue();
     if (!document.hidden) world.render(playing ? delta : 0, sceneTime);
     requestAnimationFrame(frame);
@@ -355,6 +411,19 @@ function encounterDialogue(): void {
       panel.innerHTML = `<strong>${name}</strong><p>She is tearing through the trailer, muttering. Not here for you. Do not move. Do not breathe loudly.</p>`;
       panel.hidden = false;
     }
+    return;
+  }
+  if (state.encounter.phase === 'dance' && started) {
+    const line = DANCE_LINES[danceBeat(state.encounter)];
+    if (panel.dataset.mode !== 'dance' || panel.dataset.line !== line) {
+      panel.dataset.mode = 'dance';
+      panel.dataset.line = line;
+      panel.innerHTML = '<strong>CLETUS</strong><p id="dance-line"></p><p id="dance-stage" class="inspect-help"></p><p class="dance-note">YOU HAVE TO WATCH.</p>';
+      ui.find('dance-line').textContent = `"${line}"`;
+      ui.find('dance-stage').textContent = warning(state.encounter).replace('[Inside] ', '');
+      panel.hidden = false;
+    }
+    if (!ui.dialog.open && !document.hidden && voicedDialogue !== line) { voicedDialogue = line; void audio.speak(line); }
     return;
   }
   if (state.encounter.phase === 'kiss' && started) {

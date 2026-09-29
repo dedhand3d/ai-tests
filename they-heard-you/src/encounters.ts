@@ -1,6 +1,34 @@
-export const PHASES = ['idle', 'alarm', 'approach', 'entering', 'dialogue', 'search', 'leaving', 'blackout', 'kiss'] as const;
+export const PHASES = ['idle', 'alarm', 'approach', 'entering', 'dialogue', 'search', 'leaving', 'blackout', 'kiss', 'dance'] as const;
 export type Phase = typeof PHASES[number];
 export type VisitorId = 'cletus' | 'darlene';
+export type Purpose = 'talk' | 'search' | 'dildo' | 'dance';
+export const PURPOSES: Purpose[] = ['talk', 'search', 'dildo', 'dance'];
+
+// Visits are fast and violent: a short warning, the door slams open, they rush in, it slams shut.
+export const APPROACH_SECONDS = 8;
+export const ENTER_SECONDS = 1.6;
+export const LEAVE_SECONDS = 5;
+export const INSIDE_Z = -0.7;
+
+// The one-time drag number. Seconds of forced viewing; game time is frozen while it plays.
+export const DANCE_SECONDS = 20;
+export const DANCE_AT = 200;
+export const DANCE_LINES = [
+  "Do you like my body? I like my body.",
+  "Would you fuck me? I'd fuck me. I would fuck me so hard.",
+  "Don't you look at that door. You look at me. Look at all of it.",
+  "It puts the lotion on its skin. I don't know why I said that. It just came to me.",
+] as const;
+const DANCE_STAGE = [
+  '[Inside] Cletus is wearing Darlene\'s nightgown, a mop-head wig, a feather boa and lipstick applied during an earthquake. He sways. You cannot look away. The chain will not let you.',
+  '[Inside] He tucks something, flutters his crusty eyelashes and does a slow, horrible spin. The nightgown clings to a back that has never been washed on purpose.',
+  '[Inside] He licks his lipstick off his own teeth and rolls his hips at you. His armpit hair has glitter in it. Why is there glitter.',
+  '[Inside] He shuffles close enough that you can smell the Zwinkys and the lotion. His breath fogs your face. Then he backs off, deeply satisfied with himself.',
+];
+export function danceBeat(encounter: Encounter): number {
+  return Math.min(DANCE_LINES.length - 1, Math.floor((DANCE_SECONDS - encounter.remaining) / (DANCE_SECONDS / DANCE_LINES.length)));
+}
+export const DILDO_LINE = "God damnit Ronnie got the dildo again. Which one of you gave it to him?";
 
 export const RAMBLES = [
   'The moon is a replacement. The real one is in a warehouse outside Reno. Look at the seams. They painted over the fucking seams.',
@@ -42,17 +70,20 @@ export interface Encounter {
   talkCount: number;
   kissed: boolean;
   visitor: VisitorId;
-  purpose: 'talk' | 'search';
+  purpose: Purpose;
   nextVisitor?: VisitorId;
+  nextPurpose?: 'dildo' | 'dance';
 }
 
 export const encounterDefaults = (): Encounter => ({
   phase: 'idle', remaining: 0, agitation: 0, cooldown: 0, lastMove: -10, patrol: 0, origin: 1,
   suspicion: 0, visits: 0, evidence: '', chainCaught: false, outcome: '', talkCount: 0, kissed: false,
-  visitor: 'cletus', purpose: 'talk', nextVisitor: undefined,
+  visitor: 'cletus', purpose: 'talk', nextVisitor: undefined, nextPurpose: undefined,
 });
 
 export function openingLine(encounter: Encounter): string {
+  if (encounter.purpose === 'dildo') return DILDO_LINE;
+  if (encounter.purpose === 'dance') return DANCE_LINES[danceBeat(encounter)];
   if (encounter.visitor === 'darlene') {
     if (encounter.chainCaught) return 'That fitting has been played with. On my floor. In my house.';
     if (encounter.evidence) return 'You have been busy, sweetheart. Busy busy busy.';
@@ -90,11 +121,12 @@ export function warning(encounter: Encounter): string {
   const name = encounter.visitor === 'darlene' ? 'Darlene' : 'Cletus';
   switch (encounter.phase) {
     case 'alarm': return '[Rear couch] Ronnie cries out and reaches for his buzzer. Outside footsteps stop.';
-    case 'approach': return `[Outside, approaching the entry] Someone is coming. Footsteps. Handle rattling. ${Math.ceil(encounter.remaining)}s until entry.`;
-    case 'entering': return `[Entry] The door swings open. ${name} is coming into the aisle.`;
+    case 'approach': return `[Outside, running at the entry] Someone is coming FAST. Pounding footsteps. ${Math.ceil(encounter.remaining)}s until the door.`;
+    case 'entering': return encounter.purpose === 'dance' ? '[Entry] The door BANGS open. Something pink is charging down the aisle.' : `[Entry] The door BANGS open. ${name} is coming straight at you.`;
     case 'search': return '[Inside] Darlene is tearing the place apart looking for something. Do not move.';
     case 'dialogue': return `[Inside] ${name}: "${conversationLine(encounter)}"`;
     case 'kiss': return 'Cletus shuffles closer, puckers his lips and plants a brief, unwelcome kiss. Then he backs away.';
+    case 'dance': return DANCE_STAGE[danceBeat(encounter)];
     case 'blackout': return 'Everything goes dark. You hear drawers emptying.';
     case 'leaving': return encounter.outcome;
     default: return encounter.agitation >= 30 ? '[Rear couch] Ronnie tenses and grips his buzzer. Slow down. Give him some quiet.' : '';

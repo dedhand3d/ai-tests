@@ -19,19 +19,25 @@ export const ITEMS: Record<ItemId, { name: string; icon: string; description: st
   beenie: { name: 'Baby shoe', icon: 'baby', description: 'One beaded baby shoe. There is no baby here. There has never been a baby. Useless, and worse than useless: sad.' },
   lotto: { name: 'Losing ticket', icon: 'ticket', description: 'A losing scratch ticket. Three matching symbols and a prize somebody already spent on cigarettes. Useless.' },
   choke: { name: 'Smutty paperback', icon: 'book-open', description: 'CHOKE ON MY LOVE: a purple romance novel doing something illegal in fourteen states. Useless for escaping. Great for morale, allegedly.' },
+  dildo: { name: 'Dildo', icon: 'banana', description: 'The poopy stinky dildo from beside the sink. Currently stored somewhere nobody will ever look. You walk very carefully now.' },
+  zwinkys: { name: 'Zwinkys Malt Liquor', icon: 'beer', description: 'A can of Zwinkys Malt Liquor with some ash in it, but there\'s a little sip left. The can says BREWED WITH PRIDE. Pride is doing a lot of work there.' },
+  butt: { name: 'Cigarette butt', icon: 'cigarette', description: 'A cigarette butt from the emergency ashtray. Somebody chewed the filter flat. Useless, and somehow still smoldering emotionally.' },
+  bobbyPins: { name: 'Bobby pins', icon: 'paperclip', description: 'Two bent bobby pins, tangled in ash. Thin, springy, and roughly the shape of a bad idea for a cheap padlock.' },
+  usedNeedles: { name: 'Used needles', icon: 'syringe', description: 'Used needles from a pizza box, held by the very ends. Nobody here is getting stuck with these. Especially not you.' },
+  axe: { name: 'Axe', icon: 'axe', description: 'A short, heavy hatchet from the padlocked cabinet. There is hair on the blade. The front door is plywood and bad decisions.' },
 };
 
 export const HOTSPOTS: Record<HotspotId, string> = {
   screwdriver: 'Screwdriver', belongings: 'Confiscated belongings',
   brassKey: 'Brass key', finalKey: 'Heavy key', magnet: 'Fridge magnet', beenie: 'Baby shoe', lotto: 'Losing ticket', choke: 'Smutty paperback',
   drawer: 'Kitchen drawer', cushion: 'Seat cushion', spoon: 'Bent spoon', rag: 'Filthy rag',
-  bracket: 'Corroded floor fitting', cuff: 'Your cuff', seat: 'Original seat', tv: 'Missing-person report',
+  bracket: 'Corroded floor fitting', cuff: 'Your cuff', seat: 'Stinky Pee Couch', tv: 'Missing-person report',
   door: 'Entry door', hatch: 'Emergency hatch', ashtray: 'Emergency ashtray', notice: 'House rules',
-  pizza: 'Pizza box', trash: 'Trash bags', floorPapers: 'Floor papers', cans: 'Counter cans',
-  'cab-k1': 'Lower cabinet', 'cab-k2': 'Lower cabinet', 'cab-k3': 'Lower cabinet',
-  'cab-u1': 'Upper cabinet', 'cab-u2': 'Upper cabinet', 'cab-u3': 'Upper cabinet',
-  rearCab: 'Padlocked cabinet', needles: 'Discarded needles', dildo: 'Something awful on the counter',
-  wall1: 'Wall paper', wall2: 'Wall paper', wall3: 'Wall paper', ronnie: 'Ronnie',
+  pizza: 'Pizza box', pizzaRear: 'Pizza box', trash: 'Trash bags', floorPapers: 'Floor papers', cans: 'Can of Zwinkys Malt Liquor',
+  'cab-k1': 'Lower cabinet', 'cab-k2': 'Lower cabinet 2', 'cab-k3': 'Lower cabinet 3',
+  'cab-u1': 'Upper cabinet', 'cab-u2': 'Upper cabinet 2', 'cab-u3': 'Upper cabinet 3',
+  rearCab: 'Padlocked cabinet', needles: 'Discarded needles', dildo: 'Something awful on the counter', axe: 'Axe',
+  wall1: 'Wallpaper', wall2: 'Wallpaper', wall3: 'Wallpaper', ronnie: 'Ronnie',
 };
 
 const RUMMAGE_DONE = 'Picked clean. Nothing left here but the smell.';
@@ -50,6 +56,8 @@ export function inspect(id: HotspotId, state: GameState): string {
     case 'beenie': return ITEMS.beenie.description;
     case 'lotto': return ITEMS.lotto.description;
     case 'choke': return ITEMS.choke.description;
+    case 'axe': return ITEMS.axe.description;
+    case 'pizzaRear': return state.usedNeedles === 'pizzaRear' ? 'There are used needles in the box' : 'An empty pizza box that used to hold needles. It still holds the vibe.';
     case 'bracket': return isFree(state) ? 'The floor fitting is loose. The padlock and cuff are not. You can lay the fitting back over its old marks at your seat.' : 'The padlock is solid. The floor fitting is not. A broad slot in the corroded fitting looks about spoon-handle wide.';
     case 'cuff': return state.cuffOpen ? 'The cuff hangs open. Your wrist remembers being owned.' : 'A steel cuff around your wrist, chained to the floor fitting. The keyhole is big, old and brass. Not a spoon job.';
     case 'seat': return 'Your assigned accommodation. A seat, a cuff, and a view of everybody else\'s bullshit.';
@@ -81,24 +89,24 @@ export function inspect(id: HotspotId, state: GameState): string {
 
 export function hints(state: GameState): string[] {
   if (state.cuffOpen) return [
-    'The cuff is open. The front door is locked. That leaves exactly one way out.',
-    'The rear emergency hatch rattles. It is just held shut by its own bad attitude.',
-    'Go to the rear bunk, then Use the hatch. And go. Go now.',
+    'The cuff is open. The hatch is glued shut. The front door is just plywood.',
+    'Something heavy from the rear cabinet would go through that door.',
+    'Take the axe, go to Your seat, select the axe and Use it on the entry door until it gives.',
   ];
-  if (state.cabinetUnlocked || state.finalKey !== 'cabinet') return [
-    'The heavy key from the rear cabinet is the cuff key. Take it if you have not.',
-    'Select the heavy key and use it on your cuff at the floor fitting view.',
-    'The cuff is steel, the key is heavy brass. Use the key on the cuff, then get to the rear hatch.',
+  if (state.cabinetUnlocked) return [
+    'The rear cabinet is open. There are two useful things inside.',
+    'The heavy key opens the cuff. The axe opens everything else.',
+    'Take the heavy key and the axe. Use the key on your cuff at the floor fitting, then the axe on the entry door.',
   ];
   if (isFree(state)) return [
-    'The floor is yours. Now you need two keys: a little brass one and a heavy one.',
-    'Dig through the pizza box on the dinette. Somebody hides small valuable things in grease.',
-    'Use the brass key on the padlocked cabinet at the rear bunk. Take the heavy key inside and open your cuff.',
+    'The floor is yours. There is a padlocked cabinet by the rear bunk.',
+    'A cheap padlock does not need a key. Something thin and springy would do. Check the emergency ashtray.',
+    'At the dinette, Take from the emergency ashtray to get bobby pins. Select them and Use them on the padlocked cabinet.',
   ];
   if (state.spoon !== 'inventory') return [
     'The chain gives you just enough room to search your seat and the nearby drawer.',
     'There is a hard lump under the seat cushion.',
-    'At Your seat, use the cushion to lift it, then take the spoon from underneath.',
+    'At Your seat, use the cushion to lift it, then grab the spoon from underneath.',
   ];
   return [
     'The padlock is not the weakest part of this arrangement.',

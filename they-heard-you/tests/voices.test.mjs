@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { openingLine, encounterDefaults, RAMBLES, DARLENE_RAMBLES } from '../.test-dist/encounters.js';
+import { openingLine, encounterDefaults, RAMBLES, DARLENE_RAMBLES, DANCE_LINES, DILDO_LINE } from '../.test-dist/encounters.js';
 import { freshState, transition } from '../.test-dist/state.js';
 
 const manifest = JSON.parse(readFileSync(new URL('../public/voices/manifest.json', import.meta.url), 'utf8').replace(/^﻿/, ''));
@@ -38,6 +38,13 @@ test('every Darlene opening and consequence has a bundled spoken clip', () => {
     const outcome = transition(state,{type:'respond',response}).state.encounter.outcome;
     if (outcome) hasClip(outcome); // 'more' keeps talking, no closing line
   }
+});
+test('the drag number, its exit line and the dildo storm-in are voiced', () => {
+  for (const line of DANCE_LINES) hasClip(line);
+  hasClip(DILDO_LINE);
+  let state = freshState();
+  Object.assign(state.encounter, { phase: 'dance', purpose: 'dance', remaining: 0.5 });
+  hasClip(transition(state, { type: 'tick', seconds: 1 }).state.encounter.outcome);
 });
 test('outside dialogue and approach are voiced; Ronnie has no speech clips', () => {
   const source=readFileSync(new URL('../src/content.ts',import.meta.url),'utf8');

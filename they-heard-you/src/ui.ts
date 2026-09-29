@@ -1,4 +1,4 @@
-import { createIcons, Armchair, ArrowLeft, ArrowRight, Baby, BedSingle, BookOpen, CookingPot, Eye, Hand, HelpCircle, Key, KeyRound, Link, Magnet, Maximize, MessageCircle, Pause, Play, RotateCcw, Settings, Shirt, Ticket, Tv, Undo2, Utensils, Volume2, Wrench, X } from 'lucide';
+import { createIcons, Armchair, ArrowLeft, ArrowRight, Axe, Baby, Banana, BedSingle, Beer, BookOpen, Cigarette, CookingPot, Eye, Hand, HelpCircle, Key, KeyRound, Link, Magnet, Maximize, MessageCircle, Paperclip, Pause, Play, RotateCcw, Settings, Shirt, Syringe, Ticket, Tv, Undo2, Utensils, Volume2, Wrench, X } from 'lucide';
 import { canVisit, inventory, isFree, type GameState, type ItemId, type Verb, type ViewId } from './state';
 import { HOTSPOTS, ITEMS, VIEWS } from './content';
 import type { Hit } from './world';
@@ -6,7 +6,7 @@ import { warning } from './encounters';
 
 export const icon = (name: string) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 export function paintIcons(): void {
-  createIcons({ icons: { Armchair, ArrowLeft, ArrowRight, Baby, BedSingle, BookOpen, CookingPot, Eye, Hand, HelpCircle, Key, KeyRound, Link, Magnet, Maximize, MessageCircle, Pause, Play, RotateCcw, Settings, Shirt, Ticket, Tv, Undo2, Utensils, Volume2, Wrench, X } });
+  createIcons({ icons: { Armchair, ArrowLeft, ArrowRight, Axe, Baby, Banana, BedSingle, Beer, BookOpen, Cigarette, CookingPot, Eye, Hand, HelpCircle, Key, KeyRound, Link, Magnet, Maximize, MessageCircle, Paperclip, Pause, Play, RotateCcw, Settings, Shirt, Syringe, Ticket, Tv, Undo2, Utensils, Volume2, Wrench, X } });
 }
 
 export class UI {
@@ -23,6 +23,7 @@ export class UI {
       <main id="game">
         <section id="viewport" aria-label="RV interior">
           <div class="film" aria-hidden="true"></div>
+          <div id="vomit" aria-hidden="true"></div>
           <header class="topline">
             <div class="time-label"><span id="day">DAY 2</span><time id="clock">11:47 PM</time></div>
             <div class="scene-label"><span>THEY HEARD YOU</span><strong id="view-name">Your seat</strong></div>
@@ -50,7 +51,7 @@ export class UI {
         </nav>
         <section id="console" aria-label="Actions and inventory">
           <div class="verb-panel" role="group" aria-label="Action verb">
-            ${(['look', 'take', 'use', 'talk', 'put-back'] as Verb[]).map((verb, index) => `<button data-verb="${verb}" aria-pressed="${verb === 'use'}">${icon(['eye', 'hand', 'wrench', 'message-circle', 'undo-2'][index])}<span>${verb === 'put-back' ? 'Put back' : verb}</span></button>`).join('')}
+            ${(['look', 'take', 'use', 'talk', 'put-back'] as Verb[]).map((verb, index) => `<button data-verb="${verb}" aria-pressed="${verb === 'use'}">${icon(['eye', 'hand', 'wrench', 'message-circle', 'undo-2'][index])}<span>${verb === 'put-back' ? 'Put back' : verb === 'take' ? 'Grab' : verb}</span></button>`).join('')}
           </div>
           <div class="inventory-panel">
             <div class="inventory-heading"><h2>INVENTORY</h2><span id="selected-name">Nothing selected</span><button id="cancel-item" class="icon-button" title="Cancel item selection (Escape)" aria-label="Cancel item selection">${icon('x')}</button></div>
@@ -116,17 +117,32 @@ export class UI {
     this.find('pretend').hidden = state.bracketWork === 0 || state.view !== 'seat';
     const message = warning(state.encounter);
     const banner = this.find('encounter-warning');
-    banner.hidden = !message || state.encounter.phase === 'dialogue';
+    banner.hidden = !message || state.encounter.phase === 'dialogue' || state.encounter.phase === 'dance';
     if (banner.textContent !== message) banner.textContent = message;
     this.find('suspicion').textContent = `${state.encounter.suspicion} / 100`;
     this.viewport.classList.toggle('has-warning', Boolean(message));
-    const blocked = state.encounter.phase === 'dialogue' || state.encounter.phase === 'entering' || state.encounter.phase === 'blackout' || state.encounter.phase === 'kiss';
+    const blocked = state.encounter.phase === 'dialogue' || state.encounter.phase === 'entering' || state.encounter.phase === 'blackout' || state.encounter.phase === 'kiss' || state.encounter.phase === 'dance';
     this.find('views').inert = blocked;
     this.find('console').inert = blocked;
     this.find('pretend').inert = blocked;
   }
 
   say(message: string): void { this.message.textContent = message; }
+
+  // Purely visual: a hard flash and lurch when the door bangs open.
+  jolt(): void {
+    this.viewport.classList.remove('jolt');
+    void this.viewport.offsetWidth;
+    this.viewport.classList.add('jolt');
+  }
+
+  // Purely visual: restarts the splatter animation.
+  vomit(): void {
+    const overlay = this.find('vomit');
+    overlay.classList.remove('active');
+    void overlay.offsetWidth;
+    overlay.classList.add('active');
+  }
 
   showModal(html: string): void {
     this.modalBody.innerHTML = html;

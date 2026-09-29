@@ -1,7 +1,11 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { canvasTexture, dirtyTexture, lettering, seededRandom, televisionTexture } from './textures';
-import { hasStash, isFree, type CabinetId, type GameState, type HotspotId, type ViewId } from './state';
-import { patrolDepth } from './encounters';
+import { hasStash, isFree, type CabinetId, type GameState, type HotspotId, type ItemId, type ViewId } from './state';
+import { APPROACH_SECONDS, DANCE_SECONDS, ENTER_SECONDS, INSIDE_Z, LEAVE_SECONDS, patrolDepth } from './encounters';
 
 type Position = [number, number, number];
 type Surface = THREE.Material | THREE.Material[];
@@ -15,6 +19,12 @@ const CAMERAS: Record<ViewId, { eye: Position; aim: Position; fov: number }> = {
   dinette: { eye: [0.36, 1.39, -0.74], aim: [-0.12, 1.11, 1.62], fov: 70 },
   rear: { eye: [0.04, 1.47, 0.66], aim: [0.1, 1.12, 3.35], fov: 66 },
 };
+
+// Floor litter stays on open floor: the main aisle, or the strip between the rear bunk and Ronnie's couch.
+// Each paper gets its own height so overlapping sheets never z-fight.
+const paperHeight = (index: number) => -0.017 + index * 0.0011;
+const DRAWER_SHUT = -1.25;
+const DRAWER_OPEN = -0.72;
 
 export class World {
   readonly renderer: THREE.WebGLRenderer;
@@ -61,6 +71,20 @@ export class World {
   private readonly cletusLegs: THREE.Group[] = [];
   private readonly cletusHead = new THREE.Group();
   private readonly cletusLips = new THREE.Group();
+  private readonly cletusArms: THREE.Group[] = [];
+  private readonly dragParts: THREE.Object3D[] = [];
+  private readonly zwinkysCan = new THREE.Group();
+  private readonly ashtray = new THREE.Group();
+  private readonly ashtrayPins = new THREE.Group();
+  private readonly pizzaRear = new THREE.Group();
+  private readonly rearNeedles = new THREE.Group();
+  private readonly axe = new THREE.Group();
+  private readonly butt = new THREE.Group();
+  private readonly composer: EffectComposer;
+  private readonly outline: OutlinePass;
+  private hovered: HotspotId | null = null;
+  private shake = 0;
+  private doorState = 0;
   private readonly kissLight = new THREE.PointLight(0xd8b78d, 0, 2, 2);
   private readonly blueLight = new THREE.PointLight(0x81acfc, 3, 4, 2);
   private state: GameState;
@@ -88,6 +112,19 @@ export class World {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.setAttribute('aria-label', 'Interactive three-dimensional RV interior');
     this.host.append(this.renderer.domElement);
+    // Hover glow: an acid-green outline around whatever the cursor is on.
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.setPixelRatio(1);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.outline = new OutlinePass(new THREE.Vector2(256, 256), this.scene, this.camera);
+    this.outline.visibleEdgeColor.set(0xc6ff3a);
+    this.outline.hiddenEdgeColor.set(0x5b7a14);
+    this.outline.edgeStrength = 6;
+    this.outline.edgeGlow = 0.7;
+    this.outline.edgeThickness = 1.6;
+    this.outline.pulsePeriod = 1.7;
+    this.composer.addPass(this.outline);
+    this.composer.addPass(new OutputPass());
     this.scene.background = new THREE.Color(0x11171a);
     this.scene.fog = new THREE.FogExp2(0x171c19, 0.045);
     this.wood = new THREE.MeshStandardMaterial({ map: dirtyTexture('wood', 32), roughness: 0.94 });
@@ -232,7 +269,7 @@ export class World {
     for (const edge of [-0.8, 0.35]) this.box([0.17, 2.14, 0.055], [1.71, 1.07, edge], this.metal);
     this.box([0.7, 0.08, 1.2], [2.1, -0.08, -0.225], this.dark);
     this.register('wall1', this.sign(['RENT DUE', 'EVEN IF', 'ARRESTED'], [0.42, 0.5], [1.635, 1.65, -1.86], -Math.PI / 2));
-    const notice = this.sign(['HOME SWEET', 'CODE', 'VIOLATION'], [0.95, 0.53], [-0.15, 2.05, 3.85], Math.PI);
+    const notice = this.sign(['HOUSE RULES', 'NO TOUCHING', 'NO DILDO 4 RONNIE', 'NOT TOO LOUD', 'DONT TOUCH AMP', 'NO ESCAPING'], [0.95, 0.53], [-0.15, 2.05, 3.85], Math.PI);
     this.register('notice', notice);
     this.register('wall2', this.sign(['DO NOT TOUCH', 'THE EMERGENCY', 'ASHTRAY'], [0.5, 0.4], [-1.67, 1.48, -2.18], Math.PI / 2));
     this.sign(['SHUT THE', 'FUCKING', 'DRAWER'], [0.4, 0.37], [-1.25, 1.72, -2.43]);
@@ -240,7 +277,17 @@ export class World {
   }
 
   private buildKitchen(): void {
-    this.box([0.78, 0.89, 2.32], [-1.25, 0.46, -1.84], this.wood);
+    // Lower carcass: hollow, so the doors open onto real space.
+    const inside = new THREE.MeshStandardMaterial({ color: 0x5d4c38, map: dirtyTexture('wood', 61), roughness: 1 });
+    this.box([0.04, 0.89, 2.32], [-1.62, 0.46, -1.84], inside);
+    this.box([0.74, 0.04, 2.32], [-1.25, 0.035, -1.84], inside);
+    this.box([0.74, 0.04, 2.32], [-1.25, 0.67, -1.84], inside);
+    for (const depth of [-2.98, -0.7]) this.box([0.78, 0.89, 0.04], [-1.25, 0.46, depth], this.wood);
+    for (const depth of [-2.215, -1.465]) this.box([0.74, 0.62, 0.03], [-1.25, 0.36, depth], inside);
+    for (const [from, to] of [[-3, -2.91], [-2.27, -2.16], [-1.52, -1.41], [-0.77, -0.68]]) this.box([0.04, 0.89, to - from], [-0.88, 0.46, (from + to) / 2], this.wood);
+    this.box([0.04, 0.07, 2.32], [-0.88, 0.035, -1.84], this.wood);
+    for (const [from, to] of [[-3, -1.87], [-1.11, -0.68]]) this.box([0.04, 0.26, to - from], [-0.88, 0.79, (from + to) / 2], this.wood);
+    this.box([0.04, 0.045, 0.76], [-0.88, 0.895, -1.49], this.wood);
     this.box([0.93, 0.085, 2.42], [-1.2, 0.96, -1.84], new THREE.MeshStandardMaterial({ map: dirtyTexture('ceiling', 48), roughness: 0.95 }));
     for (let panel = 0; panel < 3; panel++) {
       const hinge = new THREE.Group();
@@ -267,7 +314,13 @@ export class World {
       ring.rotation.x = Math.PI / 2;
       this.scene.add(ring);
     }
-    this.box([0.64, 0.49, 2.29], [-1.36, 2.03, -1.84], this.wood);
+    // Upper carcass, hollow as well.
+    this.box([0.04, 0.49, 2.29], [-1.66, 2.03, -1.84], inside);
+    for (const height of [1.805, 2.255]) this.box([0.64, 0.04, 2.29], [-1.36, height, -1.84], this.wood);
+    for (const depth of [-2.965, -0.715]) this.box([0.64, 0.49, 0.04], [-1.36, 2.03, depth], this.wood);
+    for (const depth of [-2.205, -1.485]) this.box([0.6, 0.45, 0.03], [-1.36, 2.03, depth], inside);
+    for (const [from, to] of [[-2.985, -2.9], [-2.23, -2.18], [-1.51, -1.46], [-0.79, -0.695]]) this.box([0.03, 0.49, to - from], [-1.055, 2.03, (from + to) / 2], this.wood);
+    for (const height of [1.807, 2.252]) this.box([0.03, 0.045, 2.29], [-1.055, height, -1.84], this.wood);
     for (let panel = 0; panel < 3; panel++) {
       const hinge = new THREE.Group();
       hinge.position.set(-1.04, 2.03, -2.56 + panel * 0.72 - 0.34);
@@ -277,8 +330,8 @@ export class World {
       this.cabDoors[`u${panel + 1}`] = hinge;
       this.register(`cab-u${panel + 1}` as HotspotId, hinge);
     }
-    this.box([0.52, 0.16, 0.65], [-0.855, 0.776, -1.49], this.dark);
-    this.drawer.position.set(-1.1, 0.77, -1.49);
+    // The drawer slides in a real slot in the hollow carcass; closed, its front sits flush with the cabinets.
+    this.drawer.position.set(DRAWER_SHUT, 0.77, -1.49);
     this.scene.add(this.drawer);
     this.box([0.7, 0.045, 0.65], [0, -0.052, 0], this.wood, this.drawer);
     this.box([0.07, 0.2, 0.75], [0.37, 0, 0], this.wood, this.drawer);
@@ -307,7 +360,9 @@ export class World {
     this.cup([-1.2, 1.07, -1.16]);
     this.counterCans.position.set(0, 0, 0);
     this.scene.add(this.counterCans);
-    this.can([-1.09, 1.11, -1.86], 0.11, this.counterCans);
+    this.zwinkysCan.position.set(-1.09, 1.1, -1.86);
+    this.zwinkysModel(this.zwinkysCan);
+    this.counterCans.add(this.zwinkysCan);
     this.can([-1.38, 1.1, -1.57], 0.09, this.counterCans);
     this.can([-1.24, 1.1, -1.7], 0.08, this.counterCans);
     this.register('cans', this.counterCans);
@@ -326,7 +381,7 @@ export class World {
 
   private buildSeat(): void {
     this.box([0.82, 0.45, 1.2], [1.16, 0.23, -1.54], this.wood);
-    this.box([0.18, 0.66, 1.19], [1.51, 0.72, -1.54], this.cloth);
+    this.register('seat', this.box([0.18, 0.66, 1.19], [1.51, 0.72, -1.54], this.cloth));
     this.box([0.72, 0.06, 1.11], [1.09, 0.49, -1.54], this.dark);
     this.cushion.position.set(1.47, 0.57, -1.54);
     this.box([0.74, 0.16, 1.13], [-0.37, 0, 0], this.cloth, this.cushion);
@@ -372,6 +427,7 @@ export class World {
     const leg = this.cylinder(0.075, 0.53, [0.86, 0.24, -2.51], denim);
     leg.rotation.x = Math.PI / 2;
     this.orb([0.093, 0.067, 0.15], [0.86, 0.14, -2.09], this.dark);
+    this.register('cuff', cuff);
     this.register('seat', this.box([0.76, 0.15, 0.12], [1.13, 0.66, -2.14], this.cloth));
     this.stain([0.49, 0.002, -1.44], [0.55, 0.39]);
   }
@@ -411,13 +467,17 @@ export class World {
     }
     this.scene.add(this.needles);
     this.register('needles', this.needles);
-    const ashtray = this.cylinder(0.12, 0.03, [-0.28, 0.902, 1.13], this.dark);
-    this.register('ashtray', ashtray);
+    this.scene.add(this.ashtray);
+    this.cylinder(0.12, 0.03, [-0.28, 0.902, 1.13], this.dark, this.ashtray);
     for (let butt = 0; butt < 9; butt++) {
-      const cigarette = this.cylinder(0.008, 0.075, [-0.35 + this.random() * 0.14, 0.928, 1.06 + this.random() * 0.14], this.rust);
+      const cigarette = this.cylinder(0.008, 0.075, [-0.35 + this.random() * 0.14, 0.928, 1.06 + this.random() * 0.14], this.rust, this.ashtray);
       cigarette.rotation.z = Math.PI / 2;
       cigarette.rotation.x = this.random() * 3;
     }
+    this.ashtrayPins.position.set(-0.24, 0.925, 1.16);
+    this.pinsModel(this.ashtrayPins);
+    this.ashtray.add(this.ashtrayPins);
+    this.register('ashtray', this.ashtray);
 
     this.box([0.81, 0.68, 0.74], [1.12, 0.35, 0.7], this.wood);
     this.box([0.87, 0.07, 0.82], [1.12, 0.72, 0.7], this.wood);
@@ -440,9 +500,10 @@ export class World {
     this.blueLight.position.set(1.06, 1.24, 0.03);
     this.scene.add(this.blueLight);
     const tvCan = new THREE.Group();
-    tvCan.position.set(0, 0, 0);
+    tvCan.position.set(1.23, 1.5, 0.65);
+    tvCan.scale.setScalar(0.75);
     this.scene.add(tvCan);
-    this.can([1.23, 1.51, 0.65], 0.08, tvCan);
+    this.zwinkysModel(tvCan);
     this.register('cans', tvCan);
     this.sign(['TV KEEPS', 'ME SANE'], [0.35, 0.35], [0.98, 0.43, 0.308], Math.PI);
   }
@@ -511,7 +572,16 @@ export class World {
     // Padlocked cabinet by the bunk: holds the final key and the smutty paperback.
     this.rearCab.position.set(-1.28, 1.05, 2.66);
     this.scene.add(this.rearCab);
-    this.box([0.34, 0.5, 0.36], [0, 0, 0], this.wood, this.rearCab);
+    const cabInside = new THREE.MeshStandardMaterial({ color: 0x4d3f30, map: dirtyTexture('wood', 919), roughness: 1 });
+    this.box([0.34, 0.5, 0.03], [0, 0, 0.165], cabInside, this.rearCab);
+    for (const side of [-1, 1]) this.box([0.03, 0.5, 0.36], [side * 0.155, 0, 0], this.wood, this.rearCab);
+    for (const side of [-1, 1]) this.box([0.34, 0.03, 0.36], [0, side * 0.235, 0], this.wood, this.rearCab);
+    // The axe, handle-down, leaning inside.
+    this.axe.position.set(0.05, -0.02, 0.06);
+    this.axe.rotation.z = 0.5;
+    this.axeModel(this.axe);
+    this.rearCab.add(this.axe);
+    this.register('axe', this.axe);
     this.rearCabDoor.position.set(-0.17, 0, -0.18);
     this.rearCab.add(this.rearCabDoor);
     this.box([0.32, 0.46, 0.03], [0.16, 0, 0], this.wood, this.rearCabDoor);
@@ -537,6 +607,72 @@ export class World {
     this.rearCab.add(this.choke);
     this.register('choke', this.choke);
     this.register('rearCab', this.rearCab);
+
+    // A second pizza box on the floor by the bunk. Lid open. It is not pizza in there.
+    this.pizzaRear.position.set(-0.55, 0.73, 3.12);
+    this.pizzaRear.rotation.set(0.12, -0.3, 0);
+    this.pizzaRear.scale.setScalar(1.35);
+    this.scene.add(this.pizzaRear);
+    this.box([0.46, 0.06, 0.42], [0, 0.03, 0], new THREE.MeshStandardMaterial({ map: lettering(['PIZZA', 'REGRETS'], '#8f7f5c', '#5a2826'), roughness: 1 }), this.pizzaRear);
+    const rearLid = this.box([0.46, 0.02, 0.42], [0, 0.2, 0.3], this.wood, this.pizzaRear);
+    rearLid.rotation.x = 1.25;
+    this.box([0.42, 0.004, 0.38], [0, 0.062, 0], new THREE.MeshStandardMaterial({ color: 0x6d5a3b, map: dirtyTexture('ceiling', 313), roughness: 1 }), this.pizzaRear);
+    this.rearNeedles.position.set(0, 0.075, 0);
+    this.needlesModel(this.rearNeedles);
+    this.pizzaRear.add(this.rearNeedles);
+    this.register('pizzaRear', this.pizzaRear);
+  }
+
+  private zwinkysModel(parent: THREE.Object3D): void {
+    const label = new THREE.MeshStandardMaterial({ map: lettering(['ZWINKYS', 'MALT', 'LIQUOR'], '#c89b2c', '#3a170c', 128), metalness: 0.35, roughness: 0.6 });
+    this.cylinder(0.052, 0.165, [0, 0, 0], [label, this.metal, this.metal], parent, 14);
+    this.cylinder(0.05, 0.01, [0, 0.087, 0], this.metal, parent, 14);
+    this.box([0.02, 0.004, 0.012], [0.012, 0.094, 0], this.metal, parent);
+    this.orb([0.018, 0.004, 0.018], [-0.01, 0.093, 0.01], this.dark, parent);
+  }
+
+  private pinsModel(parent: THREE.Object3D): void {
+    const pin = new THREE.MeshStandardMaterial({ color: 0x2c2a2a, metalness: 0.7, roughness: 0.4 });
+    for (const [x, turn] of [[0, 0.3], [0.025, -0.5]] as const) {
+      const clip = new THREE.Group();
+      clip.position.set(x, 0, 0);
+      clip.rotation.y = turn;
+      parent.add(clip);
+      this.box([0.006, 0.004, 0.065], [0, 0, 0], pin, clip);
+      const bend = this.box([0.006, 0.004, 0.062], [0.007, 0.001, 0.002], pin, clip);
+      bend.rotation.y = 0.12;
+      for (let wave = 0; wave < 3; wave++) this.orb([0.004, 0.003, 0.004], [0.009, 0.002, -0.02 + wave * 0.012], pin, clip);
+    }
+  }
+
+  private needlesModel(parent: THREE.Object3D): void {
+    const barrel = new THREE.MeshStandardMaterial({ color: 0xd8e2d8, transparent: true, opacity: 0.7, roughness: 0.25 });
+    const plunger = new THREE.MeshStandardMaterial({ color: 0xc86a3c, roughness: 0.7 });
+    for (let index = 0; index < 3; index++) {
+      const syringe = new THREE.Group();
+      syringe.position.set(-0.1 + index * 0.09, 0.012, (index - 1) * 0.05);
+      syringe.rotation.set(Math.PI / 2, 0, index * 0.7 - 0.6);
+      parent.add(syringe);
+      this.cylinder(0.011, 0.11, [0, 0, 0], barrel, syringe, 8);
+      this.cylinder(0.005, 0.05, [0, -0.075, 0], plunger, syringe, 6);
+      this.box([0.03, 0.004, 0.012], [0, -0.1, 0], plunger, syringe);
+      this.cylinder(0.0018, 0.06, [0, 0.085, 0], this.metal, syringe, 4);
+    }
+  }
+
+  private axeModel(parent: THREE.Object3D): void {
+    const handle = new THREE.MeshStandardMaterial({ color: 0x7a5530, map: dirtyTexture('wood', 404), roughness: 0.9 });
+    this.cylinder(0.014, 0.4, [0, 0, 0], handle, parent, 8);
+    this.box([0.12, 0.07, 0.018], [0.045, 0.17, 0], this.metal, parent);
+    this.box([0.022, 0.09, 0.02], [0.105, 0.17, 0], new THREE.MeshStandardMaterial({ color: 0xb8b8ae, metalness: 0.9, roughness: 0.25 }), parent);
+    this.box([0.03, 0.04, 0.03], [-0.02, 0.17, 0], this.rust, parent);
+    for (let strand = 0; strand < 4; strand++) this.box([0.002, 0.03, 0.002], [0.11, 0.14 + strand * 0.012, 0.011], this.dark, parent).rotation.z = 0.4;
+  }
+
+  private buttModel(parent: THREE.Object3D): void {
+    this.cylinder(0.009, 0.035, [0, 0.012, 0], new THREE.MeshStandardMaterial({ color: 0xc87c3a, roughness: 1 }), parent, 8);
+    this.cylinder(0.009, 0.02, [0, -0.015, 0], new THREE.MeshStandardMaterial({ color: 0xd8d0bc, roughness: 1 }), parent, 8);
+    this.orb([0.009, 0.004, 0.009], [0, -0.026, 0], this.dark, parent);
   }
 
   private buildVisitor(): void {
@@ -555,10 +691,14 @@ export class World {
       this.cletusLegs.push(leg);
       this.cylinder(0.075, 0.74, [0, -0.38, 0], trousers, leg);
       this.orb([0.092, 0.075, 0.17], [0, -0.8, -0.06], this.dark, leg);
-      const arm = this.cylinder(0.045, 0.63, [side * 0.26, 1.05, -0.015], skin, this.cletus);
+      const shoulder = new THREE.Group();
+      shoulder.position.set(side * 0.24, 1.36, -0.015);
+      this.cletus.add(shoulder);
+      this.cletusArms.push(shoulder);
+      const arm = this.cylinder(0.045, 0.63, [side * 0.02, -0.31, 0], skin, shoulder);
       arm.rotation.z = side * 0.13;
-      this.orb([0.043, 0.08, 0.04], [side * 0.29, 0.72, -0.015], skin, this.cletus);
-      for (let finger = 0; finger < 3; finger++) this.box([0.013, 0.025, 0.01], [side * 0.29 + (finger - 1) * 0.018, 0.665, -0.052], this.dark, this.cletus);
+      this.orb([0.043, 0.08, 0.04], [side * 0.05, -0.64, 0], skin, shoulder);
+      for (let finger = 0; finger < 3; finger++) this.box([0.013, 0.025, 0.01], [side * 0.05 + (finger - 1) * 0.018, -0.695, -0.037], this.dark, shoulder);
     }
     this.cletusHead.position.set(0.018, 1.68, -0.025);
     this.cletusHead.rotation.z = -0.1;
@@ -595,7 +735,72 @@ export class World {
     other.name = 'outside-neighbor';
     other.scale.set(1.23, 0.91, 1.15);
     this.scene.add(other);
+    this.buildDrag();
     this.buildDarlene();
+  }
+
+  // Cletus's one-night-only look: Darlene's nightgown, a mop-head wig, a boa and a lipstick crime scene.
+  private buildDrag(): void {
+    const satin = new THREE.MeshStandardMaterial({ color: 0xe79ac0, roughness: 0.38, metalness: 0.08 });
+    const lace = new THREE.MeshStandardMaterial({ color: 0xf1e3d4, roughness: 0.9 });
+    const boa = new THREE.MeshStandardMaterial({ color: 0xff4fa8, roughness: 1, flatShading: true });
+    const mop = new THREE.MeshStandardMaterial({ color: 0xcdbb73, map: dirtyTexture('cloth', 616), roughness: 1 });
+    const lipstick = new THREE.MeshStandardMaterial({ color: 0xd11a2e, roughness: 0.35 });
+    const shadow = new THREE.MeshStandardMaterial({ color: 0x2fa7d8, roughness: 0.6 });
+    const blush = new THREE.MeshStandardMaterial({ color: 0xe0527a, roughness: 1, transparent: true, opacity: 0.8 });
+    const pearl = new THREE.MeshStandardMaterial({ color: 0xf4efe2, roughness: 0.2, metalness: 0.1 });
+    const hair = new THREE.MeshStandardMaterial({ color: 0x1d1a14, roughness: 1 });
+    const body = new THREE.Group();
+    this.cletus.add(body);
+    this.dragParts.push(body);
+    this.orb([0.235, 0.34, 0.155], [0, 1.13, 0], satin, body);
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.33, 0.52, 12, 1, true), satin);
+    skirt.material.side = THREE.DoubleSide;
+    skirt.position.set(0, 0.68, 0);
+    body.add(skirt);
+    const hem = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.018, 5, 16), lace);
+    hem.rotation.x = Math.PI / 2;
+    hem.position.set(0, 0.42, 0);
+    body.add(hem);
+    for (const side of [-1, 1]) this.box([0.02, 0.2, 0.02], [side * 0.12, 1.4, -0.06], satin, body);
+    // Chest hair escaping the neckline.
+    for (let tuft = 0; tuft < 7; tuft++) this.orb([0.014, 0.022, 0.01], [(tuft - 3) * 0.022, 1.36 + Math.abs(tuft - 3) * 0.008, -0.145], hair, body);
+    for (let bead = 0; bead < 11; bead++) {
+      const angle = Math.PI * (0.15 + bead / 10 * 0.7);
+      this.orb([0.013, 0.013, 0.013], [Math.cos(angle) * 0.11, 1.33 - Math.sin(angle) * 0.07, -0.13 - Math.sin(angle) * 0.02], pearl, body);
+    }
+    for (let feather = 0; feather < 18; feather++) {
+      const angle = feather / 18 * Math.PI * 2;
+      this.orb([0.045, 0.04, 0.045], [Math.cos(angle) * 0.15, 1.46 + Math.sin(angle * 3) * 0.01, Math.sin(angle) * 0.1], boa, body);
+    }
+    for (const side of [-1, 1]) for (let feather = 0; feather < 5; feather++) this.orb([0.04, 0.045, 0.04], [side * (0.14 + feather * 0.012), 1.38 - feather * 0.09, -0.08], boa, body);
+    for (const leg of this.cletusLegs) {
+      const heel = new THREE.Group();
+      leg.add(heel);
+      this.dragParts.push(heel);
+      this.box([0.1, 0.07, 0.2], [0, -0.79, -0.07], new THREE.MeshStandardMaterial({ color: 0xc2185b, roughness: 0.25 }), heel);
+      this.box([0.02, 0.09, 0.02], [0, -0.84, 0.04], this.dark, heel);
+    }
+    const face = new THREE.Group();
+    this.cletusHead.add(face);
+    this.dragParts.push(face);
+    for (let strand = 0; strand < 22; strand++) {
+      const angle = strand / 22 * Math.PI * 2;
+      const behind = Math.sin(angle) > -0.4;
+      const piece = this.orb([0.03, behind ? 0.24 : 0.13, 0.03], [Math.cos(angle) * 0.14, behind ? -0.02 : 0.08, Math.sin(angle) * 0.12 + 0.03], mop, face);
+      piece.rotation.z = Math.cos(angle) * 0.25;
+    }
+    this.orb([0.15, 0.07, 0.14], [0, 0.17, 0.02], mop, face);
+    // Lipstick: on the lips, past the lips, on one tooth.
+    this.orb([0.05, 0.016, 0.016], [0.014, -0.091, -0.148], lipstick, face);
+    const smear = this.box([0.06, 0.012, 0.006], [0.05, -0.075, -0.142], lipstick, face);
+    smear.rotation.z = 0.5;
+    this.box([0.013, 0.012, 0.004], [0.009, -0.075, -0.133], lipstick, face);
+    for (const side of [-1, 1]) {
+      this.box([0.1, 0.022, 0.012], [side * 0.064, 0.082, -0.128], shadow, face);
+      this.orb([0.03, 0.022, 0.006], [side * 0.08, -0.03, -0.122], blush, face);
+      for (let lash = 0; lash < 3; lash++) this.box([0.004, 0.02, 0.004], [side * (0.03 + lash * 0.03), 0.075, -0.142], this.dark, face).rotation.z = side * 0.3;
+    }
   }
 
   private buildDarlene(): void {
@@ -684,7 +889,8 @@ export class World {
     const wrappers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, 0.017, 0.15), this.rust, 100);
     const transform = new THREE.Object3D();
     for (let scrap = 0; scrap < 100; scrap++) {
-      transform.position.set((this.random() - 0.5) * 2.95, 0.02 + this.random() * 0.02, -3 + this.random() * 6.8);
+      const [x, z] = this.aisleSpot(this.random);
+      transform.position.set(x, 0.0 + this.random() * 0.012, z);
       transform.rotation.set(this.random() * 0.2, this.random() * Math.PI, this.random() * 0.2);
       transform.scale.set(0.3 + this.random(), 0.5 + this.random(), 0.3 + this.random());
       transform.updateMatrix();
@@ -693,25 +899,29 @@ export class World {
     wrappers.receiveShadow = true;
     this.scene.add(wrappers);
     for (let paperIndex = 0; paperIndex < 28; paperIndex++) {
-      const sheet = this.box([0.17 + this.random() * 0.16, 0.004, 0.24], [(this.random() - 0.5) * 2.5, 0.026, -2.8 + this.random() * 6.5], paper);
+      const [x, z] = this.aisleSpot(this.random);
+      const sheet = this.box([0.17 + this.random() * 0.16, 0.003, 0.24], [x, paperHeight(paperIndex), z], paper);
       sheet.rotation.y = this.random() * 6;
+      sheet.castShadow = false;
       this.displacedProps.push(sheet);
     }
     // Rummageable drift of papers near the seat: overdue notices and one losing scratch ticket.
     this.floorPapers.position.set(0, 0, 0);
     this.scene.add(this.floorPapers);
     for (let sheet = 0; sheet < 7; sheet++) {
-      const page = this.box([0.18 + this.random() * 0.12, 0.004, 0.25], [0.35 + this.random() * 0.5, 0.03, -2.1 + this.random() * 0.7], paper, this.floorPapers);
+      const page = this.box([0.18 + this.random() * 0.12, 0.003, 0.25], [0.1 + this.random() * 0.45, paperHeight(28 + sheet), -2.3 + this.random() * 0.75], paper, this.floorPapers);
       page.rotation.y = this.random() * 6;
+      page.castShadow = false;
     }
-    this.lotto.position.set(0.55, 0.033, -1.85);
+    this.lotto.position.set(0.35, paperHeight(36), -1.95);
     this.lotto.rotation.y = 0.7;
     this.box([0.1, 0.004, 0.14], [0, 0, 0], new THREE.MeshStandardMaterial({ map: lettering(['SCRATCH', 'HERE'], '#8c2f2f', '#e8d8b0', 96), roughness: 1 }), this.lotto);
     this.floorPapers.add(this.lotto);
     this.register('lotto', this.lotto);
     this.register('floorPapers', this.floorPapers);
     for (let canIndex = 0; canIndex < 20; canIndex++) {
-      this.can([(this.random() - 0.5) * 2.7, 0.07, -2.7 + this.random() * 6], 0.075);
+      const [x, z] = this.aisleSpot(this.random);
+      this.can([x, 0.036, z], 0.075);
     }
     const bagMaterial = new THREE.MeshStandardMaterial({ color: 0x171c19, roughness: 0.42, flatShading: true });
     this.trash.position.set(0, 0, 0);
@@ -727,6 +937,14 @@ export class World {
     const cablePoints = [new THREE.Vector3(1.42, 0.02, 1), new THREE.Vector3(0.52, 0.024, 0.6), new THREE.Vector3(0.11, 0.026, 1.1), new THREE.Vector3(-0.4, 0.02, 0.4), new THREE.Vector3(-1.12, 0.025, -0.3)];
     this.scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cablePoints), 30, 0.012, 5, false), this.dark));
     for (let stain = 0; stain < 15; stain++) this.stain([(this.random() - 0.5) * 2.8, 0.006, -3 + this.random() * 6.8], [0.35 + this.random(), 0.3 + this.random()]);
+  }
+
+  private aisleSpot(random: () => number): [number, number] {
+    if (random() < 0.15) return [0.15 + random() * 0.45, 2.7 + random() * 1.05];
+    const z = -2.85 + random() * 5.25;
+    // Beside the couch the aisle narrows; keep clear of the fitting and chain.
+    const right = z > -2.2 && z < -0.9 ? 0.2 : 0.55;
+    return [-0.5 + random() * (0.5 + right), z];
   }
 
   private buildInteractives(): void {
@@ -768,8 +986,9 @@ export class World {
     if (this.layout !== state.layout) {
       this.layout = state.layout;
       const random = seededRandom(state.seed + state.layout);
-      this.displacedProps.forEach(prop => {
-        prop.position.set((random() - 0.5) * 2.4, 0.027, -2.8 + random() * 6.2);
+      this.displacedProps.forEach((prop, index) => {
+        const [x, z] = this.aisleSpot(random);
+        prop.position.set(x, paperHeight(index), z);
         prop.rotation.y = random() * Math.PI * 2;
       });
     }
@@ -778,14 +997,28 @@ export class World {
     this.selectedView = state.view;
     this.spoon.visible = state.spoon === 'cushion' && state.cushionRaised;
     this.rag.visible = state.rag === 'drawer' && state.drawerOpen;
-    this.brassKey.visible = state.brassKey === 'pizza' && state.rummaged.pizza;
-    this.lotto.visible = state.lotto === 'floor' && !state.rummaged.floorPapers;
+    this.brassKey.visible = false;
+    this.lotto.visible = state.lotto === 'floor';
     this.finalKey.visible = state.finalKey === 'cabinet' && state.cabinetUnlocked;
     this.choke.visible = state.choke === 'cabinet' && state.cabinetUnlocked;
+    this.axe.visible = state.axe === 'cabinet' && state.cabinetUnlocked;
     this.magnet.visible = state.magnet === 'cab-k1' && state.cabinets['k1'];
     this.beenie.visible = state.beenie === 'cab-u2' && state.cabinets.u2;
-    for (const id of Object.keys(this.cabDoors)) this.cabDoors[id].rotation.y = state.cabinets[id as CabinetId] ? -1.1 : 0;
-    this.rearCabDoor.rotation.y = state.cabinetUnlocked ? -0.9 : 0;
+    this.zwinkysCan.visible = state.zwinkys === 'counter';
+    this.ashtrayPins.visible = state.bobbyPins === 'ashtray';
+    this.rearNeedles.visible = state.usedNeedles === 'pizzaRear';
+    this.dildo.visible = state.dildo === 'counter' || state.dildo === 'ronnie';
+    if (state.dildo === 'ronnie') {
+      // Ronnie's trophy, waved overhead with total commitment.
+      this.dildo.position.set(1.28 + Math.sin(state.elapsed * 5) * 0.06, 1.12 + Math.abs(Math.sin(state.elapsed * 7)) * 0.1, 2.7);
+      this.dildo.rotation.set(0, 0, Math.sin(state.elapsed * 9) * 0.7);
+    } else {
+      this.dildo.position.set(-1.16, 1.05, -1.3);
+      this.dildo.rotation.set(0, 0, 0);
+    }
+    // Doors swing out into the aisle, never into the carcass.
+    for (const id of Object.keys(this.cabDoors)) this.cabDoors[id].rotation.y = state.cabinets[id as CabinetId] ? 1.1 : 0;
+    this.rearCabDoor.rotation.y = state.cabinetUnlocked ? 1.2 : 0;
     this.rearCabLock.visible = !state.cabinetUnlocked;
     this.bolt.rotation.y = state.bracketWork * 0.7;
     this.bolt.position.y = 0.037 + state.bracketWork * 0.005;
@@ -795,30 +1028,63 @@ export class World {
     this.chain.position.y = loose ? 0.012 : 0.12;
     const encounter = state.encounter;
     const isDarlene = encounter.visitor === 'darlene';
-    const progress = encounter.phase === 'entering' ? (4 - encounter.remaining) / 4 : encounter.phase === 'leaving' ? encounter.remaining / 5 : encounter.phase === 'dialogue' || encounter.phase === 'search' || encounter.phase === 'kiss' ? 1 : 0;
-    const walk = Math.max(0, (progress - 0.25) / 0.75);
-    const depth = encounter.phase === 'idle' ? patrolDepth(encounter.patrol) : encounter.phase === 'alarm' ? encounter.origin : encounter.phase === 'approach' ? THREE.MathUtils.lerp(encounter.origin, -0.225, 1 - encounter.remaining / 12) : -0.225;
-    this.cletus.visible = !isDarlene || progress === 0;
-    this.darlene.visible = isDarlene && progress > 0;
+    const { smoothstep, lerp } = THREE.MathUtils;
+    const phase = encounter.phase;
+    const drag = !isDarlene && (encounter.purpose === 'dance' && (phase === 'entering' || phase === 'dance' || phase === 'leaving') || encounter.nextPurpose === 'dance');
+    // Entrances are violent: the door bangs open, they charge in, the door slams shut behind them.
+    let walk = 0;
+    let door = 0;
+    let rattle = 0;
+    if (phase === 'entering') {
+      const t = ENTER_SECONDS - encounter.remaining;
+      walk = smoothstep(t, 0.06, 0.8);
+      door = t < 0.1 ? t / 0.1 : t < 0.9 ? 1 : Math.max(0, 1 - (t - 0.9) / 0.07);
+      rattle = t > 0.97 ? Math.sin((t - 0.97) * 55) * 0.06 * Math.max(0, 1 - (t - 0.97) / 0.6) : 0;
+    } else if (phase === 'leaving') {
+      const t = LEAVE_SECONDS - encounter.remaining;
+      walk = 1 - smoothstep(t, 0.1, 0.75);
+      door = t < 0.08 ? t / 0.08 : t < 0.85 ? 1 : Math.max(0, 1 - (t - 0.85) / 0.07);
+      rattle = t > 0.92 ? Math.sin((t - 0.92) * 55) * 0.06 * Math.max(0, 1 - (t - 0.92) / 0.6) : 0;
+    } else if (phase === 'dialogue' || phase === 'search' || phase === 'kiss' || phase === 'dance') walk = 1;
+    const inside = walk > 0;
+    const insideZ = drag && phase === 'leaving' ? -1.25 : INSIDE_Z;
+    const depth = phase === 'idle' ? patrolDepth(encounter.patrol) : phase === 'alarm' ? encounter.origin : phase === 'approach' ? lerp(encounter.origin, -0.225, smoothstep(1 - encounter.remaining / APPROACH_SECONDS, 0, 0.85)) : lerp(-0.225, insideZ, smoothstep(walk, 0.5, 1));
+    this.cletus.visible = !isDarlene || !inside;
+    this.darlene.visible = isDarlene && inside;
     const active = isDarlene ? this.darlene : this.cletus;
     const activeLegs = isDarlene ? this.darleneLegs : this.cletusLegs;
-    active.position.set(THREE.MathUtils.lerp(2.25, isDarlene ? 0.75 : 0.6, walk), 0, depth);
-    active.rotation.y = progress > 0 ? encounter.phase === 'leaving' ? -Math.PI / 2 : Math.PI / 2 : Math.cos(encounter.patrol * 0.48) > 0 ? Math.PI : 0;
-    if (encounter.phase === 'dialogue' || encounter.phase === 'search') active.rotation.y = 0;
-    if (encounter.phase === 'search') active.position.x = THREE.MathUtils.lerp(0.75, 0.2, Math.abs(Math.sin(state.elapsed * 1.5)) * 0.6);
-    this.doorHinge.rotation.y = -Math.min(1, progress * 4) * 1.65;
-    const moving = encounter.phase === 'idle' || encounter.phase === 'approach' || encounter.phase === 'entering' || encounter.phase === 'leaving' || encounter.phase === 'search';
-    activeLegs.forEach((leg, index) => { leg.rotation.x = moving ? Math.sin(state.elapsed * 7 + index * Math.PI) * 0.27 : 0; });
-    this.cletusHead.rotation.y = encounter.phase === 'dialogue' && !isDarlene ? Math.sin(state.elapsed * 1.2) * 0.15 : 0;
-    this.darleneHead.rotation.y = (encounter.phase === 'dialogue' || encounter.phase === 'search') && isDarlene ? Math.sin(state.elapsed * 1.1) * 0.14 : 0;
-    this.cletusHead.rotation.x = 0;
+    active.position.set(lerp(2.25, isDarlene ? 0.75 : 0.6, walk), 0, depth);
+    active.rotation.set(0, inside ? phase === 'leaving' ? -Math.PI / 2 : Math.PI / 2 : Math.cos(encounter.patrol * 0.48) > 0 ? Math.PI : 0, 0);
+    if (phase === 'dialogue' || phase === 'search' || (phase === 'entering' && walk > 0.8)) active.rotation.y = 0;
+    if (phase === 'search') active.position.x = lerp(0.75, 0.2, Math.abs(Math.sin(state.elapsed * 1.5)) * 0.6);
+    const doorAngle = -door * 1.8 + rattle;
+    if (doorAngle !== 0 && ((door >= 1 && this.doorState < 1) || (door <= 0 && this.doorState > 0.5))) this.shake = 1;
+    this.doorState = door;
+    this.doorHinge.rotation.y = doorAngle;
+    // Charging in or out: bent forward, twitching, legs pumping.
+    const rushing = (phase === 'entering' || phase === 'leaving') && walk > 0 && walk < 1;
+    const running = phase === 'approach' || rushing;
+    if (rushing) {
+      active.rotation.x = 0.22;
+      active.rotation.z = Math.sin(state.elapsed * 31) * 0.07;
+      active.position.y = -Math.abs(Math.sin(state.elapsed * 16)) * 0.05;
+    }
+    const moving = phase === 'idle' || phase === 'approach' || phase === 'entering' || phase === 'leaving' || phase === 'search';
+    activeLegs.forEach((leg, index) => { leg.rotation.x = moving ? Math.sin(state.elapsed * (running ? 17 : 7) + index * Math.PI) * (running ? 0.55 : 0.27) : 0; });
+    this.cletusHead.rotation.set(0, phase === 'dialogue' && !isDarlene ? Math.sin(state.elapsed * 1.2) * 0.15 : 0, -0.1);
+    this.darleneHead.rotation.y = (phase === 'dialogue' || phase === 'search') && isDarlene ? Math.sin(state.elapsed * 1.1) * 0.14 : 0;
+    if (rushing && !isDarlene) this.cletusHead.rotation.set(Math.sin(state.elapsed * 23) * 0.2, Math.sin(state.elapsed * 13) * 0.4, -0.1);
+    if (rushing && isDarlene) this.darleneHead.rotation.y = Math.sin(state.elapsed * 19) * 0.35;
     this.cletusLips.scale.set(1, 1, 1);
+    this.cletusArms.forEach((arm, index) => arm.rotation.set(rushing ? Math.sin(state.elapsed * 17 + index * Math.PI) * 0.9 : 0, 0, 0));
     this.kissLight.intensity = 0;
+    this.dragParts.forEach(part => { part.visible = drag; });
+    if (phase === 'dance') this.dance(DANCE_SECONDS - encounter.remaining);
     if (encounter.phase === 'kiss') {
       const elapsed = 6 - encounter.remaining;
       const approach = elapsed < 3 ? THREE.MathUtils.smoothstep(elapsed, 0.5, 3) : 1 - THREE.MathUtils.smoothstep(elapsed, 4, 6);
       const lean = THREE.MathUtils.smoothstep(approach, 0.65, 1);
-      this.cletus.position.set(THREE.MathUtils.lerp(0.6, 0.37, approach), -lean * 0.24, THREE.MathUtils.lerp(-0.225, -2.72, approach));
+      this.cletus.position.set(THREE.MathUtils.lerp(0.6, 0.37, approach), -lean * 0.24, THREE.MathUtils.lerp(INSIDE_Z, -2.72, approach));
       this.kissLight.intensity = lean * 0.8;
       this.cletus.rotation.y = -0.09;
       this.cletusHead.rotation.x = -lean * 0.22;
@@ -842,6 +1108,70 @@ export class World {
     });
   }
 
+  // Twenty seconds, four movements, 125 BPM. Faces the seat camera at rotation 0.
+  private dance(t: number): void {
+    const { smoothstep, lerp } = THREE.MathUtils;
+    const beat = t * 125 / 60;
+    const sway = Math.sin(beat * Math.PI);
+    const enter = smoothstep(t, 0, 1.2);
+    const close = t < 17.5 ? smoothstep(t, 15, 17.2) : 1 - smoothstep(t, 18.2, 19.8);
+    this.cletus.position.set(lerp(0.6, 0.55, enter) + sway * 0.1 * (1 - close), -Math.abs(sway) * 0.035 - close * 0.18, lerp(lerp(INSIDE_Z, -1.25, enter), -2.5, close));
+    this.cletus.rotation.set(0, 0, sway * (t > 10 && t < 15 ? 0.15 : 0.08));
+    const [left, right] = this.cletusArms;
+    const arms = (z: number, x: number, flutter = 0) => {
+      left.rotation.set(x, 0, -z - flutter);
+      right.rotation.set(x, 0, z + flutter);
+    };
+    if (t < 5) {
+      // "Do you like my body?" Hands sliding up and down his own sides.
+      const stroke = (Math.sin(beat * Math.PI / 2) + 1) / 2;
+      arms(0.25 + stroke * 0.2, 0.35 + stroke * 0.5);
+      this.cletusHead.rotation.set(-0.15, sway * 0.25, 0.25);
+    } else if (t < 10) {
+      // Arms up, slow spin.
+      this.cletus.rotation.y = smoothstep(t, 5.5, 9.5) * Math.PI * 2;
+      arms(2.7, 0, Math.sin(beat * Math.PI * 2) * 0.2);
+      this.cletusHead.rotation.set(0.1, 0, sway * 0.3);
+    } else if (t < 15) {
+      // Hands on hips, rolling them at you. Tongue business implied.
+      arms(0.55 + Math.abs(sway) * 0.15, -0.25);
+      this.cletusHead.rotation.set(-0.1, Math.sin(beat * Math.PI * 0.5) * 0.3, -sway * 0.2);
+    } else {
+      // Shuffles in close, arms out like he is offering a hug nobody asked for.
+      arms(lerp(0.9, 1.35, close), lerp(0, 1.0, close));
+      this.cletusHead.rotation.set(-close * 0.28, 0, 0.12);
+      this.cletusLips.scale.set(1 - close * 0.5, 1 + close * 0.5, 1 + close * 1.8);
+      this.kissLight.intensity = close * 0.9;
+    }
+    this.cletusLegs.forEach((leg, index) => { leg.rotation.x = Math.sin(beat * Math.PI + index * Math.PI) * (close > 0 && close < 1 ? 0.22 : 0.16); });
+  }
+
+  setHover(id: HotspotId | null): void {
+    if (this.hovered === id) return;
+    this.hovered = id;
+    this.outline.selectedObjects = id ? this.targets.filter(target => target.id === id).map(target => target.object) : [];
+  }
+
+  // A fresh copy of an item's model for the close-up inspection view.
+  itemModel(item: ItemId): THREE.Object3D {
+    const sources: Partial<Record<ItemId, THREE.Object3D>> = {
+      spoon: this.spoon, rag: this.rag, screwdriver: this.screwdriver, brassKey: this.brassKey, finalKey: this.finalKey,
+      magnet: this.magnet, beenie: this.beenie, lotto: this.lotto, choke: this.choke, dildo: this.dildo,
+      zwinkys: this.zwinkysCan, bobbyPins: this.ashtrayPins, usedNeedles: this.rearNeedles, axe: this.axe,
+    };
+    let source = sources[item];
+    if (!source) {
+      if (!this.butt.children.length) this.buttModel(this.butt);
+      source = this.butt;
+    }
+    const copy = source.clone(true);
+    copy.position.set(0, 0, 0);
+    copy.rotation.set(0, 0, 0);
+    copy.scale.set(1, 1, 1);
+    copy.traverse(object => { object.visible = true; });
+    return copy;
+  }
+
   setReduced(value: boolean): void { this.reduced = value; this.resize(); }
 
   private snapCamera(): void {
@@ -856,6 +1186,7 @@ export class World {
   private currentShot(): { eye: Position; aim: Position; fov: number } {
     const encounter = this.state.encounter.phase;
     if (encounter === 'kiss') return { eye: [0.35, 1.32, -3.3], aim: [0.37, 1.4, -0.3], fov: 72 };
+    if (encounter === 'dance') return { eye: [0.35, 1.32, -3.3], aim: [this.cletus.position.x, 1.36 + this.cletus.position.y * 0.5, this.cletus.position.z], fov: 66 };
     const view = encounter === 'entering' || encounter === 'dialogue' ? 'seat' : this.selectedView;
     const shot = CAMERAS[view];
     return view === 'seat' && this.camera.aspect < 1 ? { ...shot, aim: [1.02, 1.04, -0.3], fov: 85 } : shot;
@@ -868,23 +1199,34 @@ export class World {
     this.lastHeight = height;
     const resolution = this.reduced ? 1 : Math.min(1, 850 / width);
     this.renderer.setSize(Math.round(width * resolution), Math.round(height * resolution), false);
+    this.composer.setSize(Math.round(width * resolution), Math.round(height * resolution));
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
 
   render(delta: number, time: number): void {
     const shot = this.currentShot();
-    const blend = this.reduced || this.state.encounter.phase === 'dialogue' ? 1 : 1 - Math.exp(-delta * 8);
+    const phase = this.state.encounter.phase;
+    // Hard cut to the door the instant it bangs open.
+    const blend = this.reduced || phase === 'dialogue' || phase === 'entering' ? 1 : 1 - Math.exp(-delta * 8);
     this.camera.position.lerp(new THREE.Vector3(...shot.eye), blend);
     this.aim.lerp(new THREE.Vector3(...shot.aim), blend);
     this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, shot.fov, blend);
     this.camera.updateProjectionMatrix();
     this.camera.lookAt(this.aim);
-    this.drawer.position.x = THREE.MathUtils.lerp(this.drawer.position.x, this.state.drawerOpen ? -0.57 : -1.1, blend);
+    if (this.shake > 0.01 && !this.reduced) {
+      const jolt = this.shake * 0.045;
+      this.camera.position.x += (Math.random() - 0.5) * jolt;
+      this.camera.position.y += (Math.random() - 0.5) * jolt;
+      this.camera.rotation.z += (Math.random() - 0.5) * jolt * 0.8;
+    }
+    this.shake *= Math.exp(-delta * 5);
+    this.drawer.position.x = THREE.MathUtils.lerp(this.drawer.position.x, this.state.drawerOpen ? DRAWER_OPEN : DRAWER_SHUT, blend);
     this.cushion.rotation.z = THREE.MathUtils.lerp(this.cushion.rotation.z, this.state.cushionRaised ? -1.0 : 0, blend);
     this.witness.scale.y = this.reduced ? 1 : 1 + Math.sin(time * 1.4) * 0.003;
     this.blueLight.intensity = this.reduced ? 3 : 3 + Math.sin(time * 8.3) * 0.075;
-    this.renderer.render(this.scene, this.camera);
+    if (this.hovered) this.composer.render(delta);
+    else this.renderer.render(this.scene, this.camera);
   }
 
   private visible(object: THREE.Object3D): boolean {
@@ -940,6 +1282,7 @@ export class World {
       if (material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshBasicMaterial) material.map?.dispose();
       material.dispose();
     }
+    this.composer.dispose();
     this.renderer.dispose();
   }
 }

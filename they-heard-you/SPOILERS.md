@@ -1,35 +1,46 @@
-# Opening Puzzle Walkthrough
+# Walkthrough
 
-This walkthrough covers only the implemented first pass. There is no full escape ending yet.
+## Getting Off The Floor
 
-1. Start with Open your eyes. You are seated, chained to a floor fitting. Only Your seat, Kitchenette, and Floor fitting views are reachable.
-2. Use Look on the floor fitting: the broad slot and rotten mounting, not the padlock, are the clue.
-3. Return to Your seat. With Use selected and no inventory item selected, click the nearby seat cushion to lift it.
-4. Click the exposed spoon to collect it, or select Take and click it. The spoon disappears from the cushion and appears in inventory.
-5. Select the spoon in inventory. Choose Floor fitting. Click the corroded fitting three times. Each click adds noise and advances permanent progress. A failed combination never consumes the spoon.
-6. The third action releases the fitting from the floor, drops the chain, and unlocks the dinette and rear cameras. The cuff remains on. Dismiss the prototype-completion panel to keep exploring.
-7. Choose Your seat, then use Pretend restrained to position the loose fitting over its marks. Concealment does not move you automatically from another view. Leaving the seat exposes it again.
+1. Start with Open your eyes. You are on the Stinky Pee Couch, chained to a floor fitting. Only Your seat, Kitchenette, and Floor fitting views are reachable.
+2. Use Look on the floor fitting: it has a screw you can loosen.
+3. At Your seat, with Use selected and no inventory item selected, click the seat cushion to lift it.
+4. Grab the exposed spoon.
+5. Select the spoon in inventory. Choose Floor fitting. Click the corroded fitting three times. Each click adds noise. A failed combination never consumes the spoon.
+6. The third action releases the fitting from the floor and unlocks the dinette and rear cameras. The cuff remains on.
+7. Choose Your seat, then use Pretend restrained to lay the loose fitting over its marks whenever someone is coming. Leaving the seat exposes it again.
+
+## Getting Out
+
+1. At Dinette / TV, Grab the Emergency ashtray: cigarette butt and bobby pins. (From any other view it is too far.)
+2. At Rear bunk, select the bobby pins and Use them on the Padlocked cabinet.
+3. Grab the axe and the heavy key from inside (Grab on the cabinet takes the axe first).
+4. At Floor fitting, select the heavy key and Use it on the cuff or the fitting. The cuff opens.
+5. At Your seat, select the axe and Use it on the entry door three times. Every swing is loud. The third one gets you out: DITCH WATER.
+
+The rear hatch is glued shut and will never open.
+
+## Optional Grossness
+
+- Grab Something awful on the counter to stash the dildo up your butt.
+- Use the Can of Zwinkys Malt Liquor (or Drink it from the Look close-up) to vomit.
+- At the rear, the pizza box on the bunk holds used needles you can Grab.
+- Leave the dildo with Ronnie (select it, Use it on Ronnie). He snatches it and hits his buzzer. Cletus storms in about it after the usual 12-second warning, so get back to the couch and pretend. Ronnie stays calm for a while afterwards, which makes sneaking around the rear safer.
 
 ## Cletus Inspection
 
-Choose Tell me more to keep Cletus talking. On the fifth continuation he approaches for a brief animated kiss, then returns to the conversation. Skip bypasses the animation. More conversation cycles through six authored topics; there is no forced ending or time penalty. Enough ends the visit and resolves any inspection evidence normally. The kiss happens at most once per visit, including after save/resume.
+Choose Tell me more to keep Cletus talking. On the fifth continuation he approaches for a brief animated kiss, then returns to the conversation. Skip bypasses the animation. Enough ends the visit and resolves any inspection evidence normally.
 
-Ronnie lies on the rear couch. Repeated rapid transitions near him or two quick uses of the broken rear hatch can startle him into an alarm. Stop moving and let his agitation settle to avoid it. The first routine inspection also starts after 95 seconds if no one has visited yet.
+Once per game, on the first routine visit after about 200 seconds, Cletus comes in dressed in Darlene's nightgown and dances for twenty seconds to Goodbye Horses. You have to watch. He checks nothing.
 
-After an alarm, outside footsteps stop; Cletus reacts and approaches. A twelve-second warning appears in every view. Close the drawer, return to Your seat, and conceal the fitting before he opens the door. Evidence is recorded at entry, so hiding afterward cannot undo what he saw.
+Ronnie lies on the rear couch. Rapid moves near him or noisy hatch shoving can startle him into an alarm. Stop moving and let his agitation settle. The first routine inspection starts at about 100 seconds if no one has visited yet.
 
-Successful pretending leads to paranoid rambling rather than a chain accusation. An open drawer can still draw attention, but does not expose a successfully concealed fitting. Evidence is fixed at entry, not changed by the dialogue response.
+After an alarm or footsteps, a twelve-second warning appears in every view. Close the drawer, return to Your seat, and conceal the fitting before the door opens. Evidence is recorded at entry.
 
-First caught chain offense: Cletus takes the spoon and refastens the chain. Open the kitchen drawer and take the screwdriver he left. Use it on the floor fitting three times to get loose again.
-
-Repeat caught chain offense: blackout, +90 seconds, next day, empty pockets, rearranged loose papers. Click Open your eyes, then open the kitchen drawer and Use the confiscated belongings bundle. Recover your screwdriver and other pocket items and loosen the fitting again. Fixed furniture and critical-item access are not randomized. Ronnie never speaks; his warning remains a nonverbal cry/buzzer.
+First caught chain offense: Cletus takes the spoon and refastens the chain, and leaves his screwdriver in the kitchen drawer. Repeat caught chain offense: blackout, +90 seconds, empty pockets. Open the kitchen drawer and Use the belongings bundle to get everything back, the axe and keys included.
 
 ## Drawer And Returns
 
-1. At Kitchenette, cancel any item selection and Use the drawer front to open it. It slides into the aisle.
-2. Take the rag from inside. It disappears into inventory.
-3. To return it, keep the drawer open, choose Put back, select the rag, and click the drawer. The rag reappears.
-4. Cancel selection, choose Use, and click the drawer to close it.
-5. The spoon can likewise be put back beneath the raised cushion at Your seat. Recollect it later if needed. Returning it never resets fitting progress.
-
-The rear hatch's missing handle, Ronnie and his buzzer, the CRT, and the outside argument establish future puzzles; none completes a second puzzle in this pass. Optional hints explicitly identify this boundary.
+1. At Kitchenette, Use the drawer front to open it.
+2. Grab the rag from inside.
+3. To return an item, choose Put back, select it, and click where it came from while that place is open.

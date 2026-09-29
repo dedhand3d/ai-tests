@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RAMBLES, DARLENE_RAMBLES, conversationLine, encounterDefaults } from '../.test-dist/encounters.js';
+import { RAMBLES, DARLENE_RAMBLES, APPROACH_SECONDS, DANCE_AT, DANCE_LINES, DANCE_SECONDS, DILDO_LINE, conversationLine, encounterDefaults } from '../.test-dist/encounters.js';
 import { freshState, transition, canVisit, isFree, inventory, decodeSave } from '../.test-dist/state.js';
 
 const act = (state, action) => transition(state, action).state;
@@ -19,10 +19,11 @@ function looseState() {
 function cuffKeyState() {
   let state = looseState();
   state = act(state, { type: 'view', view: 'dinette' });
-  state = act(state, { type: 'rummage', spot: 'pizza' });
+  state = act(state, { type: 'take-ashtray' });
   state = act(state, { type: 'view', view: 'rear' });
-  state = act(state, { type: 'unlock-cabinet', item: 'brassKey' });
+  state = act(state, { type: 'unlock-cabinet', item: 'bobbyPins' });
   state = act(state, { type: 'take', item: 'finalKey' });
+  state = act(state, { type: 'take', item: 'axe' });
   return state;
 }
 
@@ -133,19 +134,23 @@ test('transitions do not mutate previous state', () => {
   assert.equal(JSON.stringify(before), original);
 });
 
-test('alarm gives full twelve second approach and saves mid-warning', () => {
+test('alarm gives the full approach warning, saves mid-warning, and the door bangs', () => {
   let state = act(looseState(), { type: 'view', view: 'rear' });
   state = act(act(state, { type: 'rattle' }), { type: 'rattle' });
   assert.equal(state.encounter.phase, 'alarm');
   state = advance(state, 2);
   assert.equal(state.encounter.phase, 'approach');
-  assert.equal(state.encounter.remaining, 12);
-  state = advance(state, 7);
+  assert.equal(state.encounter.remaining, APPROACH_SECONDS);
+  state = advance(state, APPROACH_SECONDS - 3);
   assert.deepEqual(decodeSave(JSON.stringify(state)), state);
-  state = advance(state, 4);
+  state = advance(state, 2);
   assert.equal(state.encounter.phase, 'approach');
-  state = advance(state, 1);
-  assert.equal(state.encounter.phase, 'entering');
+  const bang = transition(state, { type: 'tick', seconds: 1 });
+  assert.equal(bang.state.encounter.phase, 'entering');
+  assert.equal(bang.sound, 'slam');
+  // Slammed shut behind him on the way in.
+  const shut = transition(bang.state, { type: 'tick', seconds: 1 });
+  assert.equal(shut.sound, 'slam');
 });
 test('conceal never teleports and inspection distinguishes caught from concealed', () => {
   let state = act(looseState(), { type: 'view', view: 'bracket' });
@@ -186,7 +191,7 @@ test('old saves migrate and nested encounter transitions remain immutable', () =
   const old = { ...looseState(), version: 1 };
   delete old.encounter;
   const migrated = decodeSave(JSON.stringify(old));
-  assert.equal(migrated.version, 4);
+  assert.equal(migrated.version, 5);
   assert.equal(migrated.encounter.phase, 'idle');
   assert.equal(migrated.cabinetUnlocked, false);
   assert.equal(migrated.brassKey, 'pizza');
@@ -223,7 +228,7 @@ test('confiscation leaves a reachable screwdriver and blackout gear can be recov
   assert.equal(state.encounter.phase,'blackout');
   assert.deepEqual(inventory(state),[]);
   assert.equal(state.knockouts,1);
-  assert.equal(state.elapsed,before+95);
+  assert.equal(state.elapsed,before+93);
   assert.deepEqual(decodeSave(JSON.stringify(state)),state);
   assert.deepEqual(advance(state,10),state);
   state=act(state,{type:'wake'});
@@ -234,59 +239,177 @@ test('confiscation leaves a reachable screwdriver and blackout gear can be recov
   assert.equal(isFree(state),true);
 });
 
-// New pivot: full escape chain.
-test('brass key is dug from the pizza box only while loose', () => {
-  let state = freshState();
-  assert.equal(act(state, { type: 'view', view: 'dinette' }).view, 'seat'); // still chained
-  state = looseState();
+// Escape chain: ashtray bobby pins, padlocked cabinet, heavy key, axe through the front door.
+test('bobby pins come from the emergency ashtray, only up close at the dinette', () => {
+  let state = looseState();
+  const far = transition(state, { type: 'take-ashtray' });
+  assert.equal(far.state.bobbyPins, 'ashtray');
+  assert.equal(far.message, 'I can’t reach that its too far');
   state = act(state, { type: 'view', view: 'dinette' });
-  assert.equal(state.brassKey, 'pizza');
-  state = act(state, { type: 'rummage', spot: 'pizza' });
-  assert.equal(state.brassKey, 'inventory');
-  // Digging again yields nothing.
-  state = act(state, { type: 'rummage', spot: 'pizza' });
-  assert.equal(state.brassKey, 'inventory');
+  state = act(state, { type: 'take-ashtray' });
+  assert.equal(state.bobbyPins, 'inventory');
+  assert.equal(state.butt, 'inventory');
+  assert.equal(act(state, { type: 'take-ashtray' }).bobbyPins, 'inventory');
+  // The pizza box no longer hides a key.
+  assert.equal(act(state, { type: 'rummage', spot: 'pizza' }).brassKey, 'pizza');
 });
 
-test('full escape chain: key, cabinet, cuff, hatch', () => {
-  let state = cuffKeyState();
+test('padlocked cabinet needs something to pick it and holds the axe', () => {
+  let state = act(looseState(), { type: 'view', view: 'rear' });
+  const locked = transition(state, { type: 'unlock-cabinet', item: null });
+  assert.equal(locked.message, 'Requires something to unlock it.');
+  assert.equal(act(state, { type: 'take', item: 'axe' }).axe, 'cabinet');
+  state = cuffKeyState();
   assert.equal(state.cabinetUnlocked, true);
+  assert.equal(state.axe, 'inventory');
   assert.equal(state.finalKey, 'inventory');
-  // Wrong key does not open the cuff.
-  assert.equal(act(state, { type: 'unlock-cuff', item: 'brassKey' }).cuffOpen, false);
+});
+
+test('full escape chain: cuff key, then three axe swings at the entry door', () => {
+  let state = cuffKeyState();
+  // Axe will not swing while cuffed.
+  assert.equal(act(act(state, { type: 'view', view: 'seat' }), { type: 'chop', item: 'axe' }).doorChops, 0);
+  assert.equal(act(state, { type: 'unlock-cuff', item: 'bobbyPins' }).cuffOpen, false);
   state = act(state, { type: 'view', view: 'bracket' });
   state = act(state, { type: 'unlock-cuff', item: 'finalKey' });
   assert.equal(state.cuffOpen, true);
-  // Escape only at the rear hatch.
-  state = act(state, { type: 'view', view: 'rear' });
-  state = act(state, { type: 'escape' });
+  // Not from the back of the trailer, and not bare-handed.
+  assert.equal(act(act(state, { type: 'view', view: 'rear' }), { type: 'chop', item: 'axe' }).doorChops, 0);
+  state = act(state, { type: 'view', view: 'seat' });
+  assert.equal(act(state, { type: 'chop', item: null }).doorChops, 0);
+  state = act(state, { type: 'chop', item: 'axe' });
+  state = act(state, { type: 'chop', item: 'axe' });
+  assert.equal(state.doorChops, 2);
+  assert.deepEqual(decodeSave(JSON.stringify(state)), state);
+  state = act(state, { type: 'chop', item: 'axe' });
   assert.equal(state.escaped, true);
-  // Escaped states do not persist a game-over save.
   assert.equal(decodeSave(JSON.stringify(state)), null);
 });
 
-test('escape requires the cuff open and the rear hatch', () => {
-  let state = looseState();
-  assert.equal(act(state, { type: 'escape' }).escaped, false);
-  let cuffed = cuffKeyState();
-  assert.equal(act(cuffed, { type: 'escape' }).escaped, false); // cuff still locked
+test('the glued rear hatch never opens but still makes noise', () => {
+  let state = act(cuffKeyState(), { type: 'view', view: 'bracket' });
+  state = act(act(state, { type: 'unlock-cuff', item: 'finalKey' }), { type: 'view', view: 'rear' });
+  const rattled = transition(state, { type: 'rattle' });
+  assert.equal(rattled.message, 'There’s no use it’s shut forever nothing to be done');
+  assert.equal(rattled.state.escaped, false);
+  assert.ok(rattled.state.noise > state.noise);
 });
 
-test('red herrings are collectible and returnable but useless', () => {
+test('red herrings are collectible and returnable but useless; the pee ticket is not', () => {
   let state = looseState();
   state = act(state, { type: 'view', view: 'kitchen' });
   state = act(state, { type: 'cabinet', cabinet: 'k1' });
   state = act(state, { type: 'take', item: 'magnet' });
   assert.equal(state.magnet, 'inventory');
-  // Magnet does nothing on the bracket.
   assert.equal(act(state, { type: 'work', item: 'magnet' }).bracketWork, 3);
-  // Losing ticket from the floor papers.
   state = act(state, { type: 'rummage', spot: 'floorPapers' });
-  assert.equal(state.lotto, 'inventory');
-  assert.deepEqual(inventory(state).sort(), ['lotto', 'magnet', 'spoon'].sort());
-  // Return the magnet to its cabinet.
+  assert.equal(state.lotto, 'floor');
+  assert.equal(transition(state, { type: 'take', item: 'lotto' }).message, 'I’m not going to touch that it smells like pee');
+  assert.deepEqual(inventory(state).sort(), ['magnet', 'spoon'].sort());
   state = act(state, { type: 'return', item: 'magnet' });
   assert.equal(state.magnet, 'cab-k1');
+});
+
+test('Zwinkys: pocket it, drink it for a vomit, and it is never used up', () => {
+  let state = freshState();
+  const sip = transition(state, { type: 'drink' });
+  assert.equal(sip.message, 'Aahh refreshing');
+  assert.equal(sip.vomit, true);
+  assert.equal(sip.sound, 'vomit');
+  const pocket = transition(state, { type: 'take', item: 'zwinkys' });
+  assert.equal(pocket.message, 'You put the Zwinkys in your pocket');
+  state = act(pocket.state, { type: 'drink' });
+  assert.equal(state.zwinkys, 'inventory');
+  assert.equal(act(state, { type: 'return', item: 'zwinkys' }).zwinkys, 'counter');
+});
+
+test('the dildo: pocketed, handed to Ronnie, and Cletus storms in about it', () => {
+  let state = freshState();
+  const taken = transition(state, { type: 'take', item: 'dildo' });
+  assert.equal(taken.message, 'I place the dildo up my butt for safe keeping surely no one will notice');
+  state = act(act(taken.state, { type: 'cushion' }), { type: 'take', item: 'spoon' });
+  for (let effort = 0; effort < 3; effort++) state = act(state, { type: 'work', item: 'spoon' });
+  state = act(state, { type: 'view', view: 'rear' });
+  // Needles are refused outright; nothing is consumed.
+  state.usedNeedles = 'inventory';
+  const refused = act(state, { type: 'give-ronnie', item: 'usedNeedles' });
+  assert.equal(refused.usedNeedles, 'inventory');
+  assert.equal(refused.encounter.phase, 'idle');
+  state = act(state, { type: 'give-ronnie', item: 'dildo' });
+  assert.equal(state.dildo, 'ronnie');
+  assert.equal(state.encounter.phase, 'alarm');
+  assert.equal(state.encounter.nextPurpose, 'dildo');
+  assert.deepEqual(decodeSave(JSON.stringify(state)), state);
+  // Get back to the couch and hide the fitting before he arrives.
+  state = advance(state, 3);
+  state = act(act(state, { type: 'view', view: 'seat' }), { type: 'conceal' });
+  state = advance(state, 15);
+  assert.equal(state.encounter.phase, 'dialogue');
+  assert.equal(state.encounter.purpose, 'dildo');
+  assert.equal(state.dildo, 'counter');
+  assert.equal(conversationLine(state.encounter), DILDO_LINE);
+  assert.equal(state.encounter.chainCaught, false);
+  state = act(state, { type: 'respond', response: 'shifted' });
+  assert.equal(state.encounter.suspicion, 10);
+  assert.ok(state.ronnieCalm > 0);
+  state = advance(state, 6);
+  // A calm Ronnie ignores even rapid trips to the back for a while.
+  for (const view of ['dinette', 'rear', 'dinette', 'rear']) state = act(state, { type: 'view', view });
+  assert.equal(state.encounter.phase, 'idle');
+});
+
+test('Cletus dances exactly once, mid-game, with the clock frozen and no evidence taken', () => {
+  let state = looseState();
+  state = { ...state, elapsed: DANCE_AT, nextVisit: DANCE_AT, encounter: { ...state.encounter, cooldown: 0 } };
+  state = act(state, { type: 'tick', seconds: 0.5 });
+  assert.equal(state.encounter.phase, 'approach');
+  assert.equal(state.encounter.nextPurpose, 'dance');
+  state = advance(state, APPROACH_SECONDS + 2);
+  assert.equal(state.encounter.phase, 'dance');
+  assert.equal(state.danced, true);
+  // The chain is exposed and he does not care; he is busy.
+  assert.equal(state.encounter.chainCaught, false);
+  const frozen = state.elapsed;
+  assert.equal(act(state, { type: 'view', view: 'rear' }).view, state.view);
+  state = advance(state, 5);
+  assert.equal(conversationLine(state.encounter), DANCE_LINES[1]);
+  assert.deepEqual(decodeSave(JSON.stringify(state)), state);
+  state = advance(state, DANCE_SECONDS - 5);
+  assert.equal(state.encounter.phase, 'leaving');
+  assert.equal(state.elapsed, frozen);
+  assert.equal(state.spoon, 'inventory');
+  state = advance(state, 6);
+  assert.equal(state.encounter.phase, 'idle');
+  // Never again.
+  state = { ...state, nextVisit: state.elapsed, encounter: { ...state.encounter, cooldown: 0 } };
+  state = act(state, { type: 'tick', seconds: 0.5 });
+  assert.equal(state.encounter.phase, 'approach');
+  assert.equal(state.encounter.nextPurpose, undefined);
+});
+
+test('v4 saves migrate with new items in place and new items survive blackout', () => {
+  const old = JSON.parse(JSON.stringify(looseState()));
+  old.version = 4;
+  for (const field of ['dildo', 'zwinkys', 'butt', 'bobbyPins', 'usedNeedles', 'axe', 'danced', 'doorChops', 'ronnieCalm']) delete old[field];
+  old.brassKey = 'inventory';
+  const migrated = decodeSave(JSON.stringify(old));
+  assert.equal(migrated.version, 5);
+  assert.equal(migrated.brassKey, 'inventory');
+  assert.equal(migrated.axe, 'cabinet');
+  assert.equal(migrated.danced, false);
+  // Legacy brass key holders can still open the cabinet.
+  assert.equal(act(act(migrated, { type: 'view', view: 'rear' }), { type: 'unlock-cabinet', item: 'brassKey' }).cabinetUnlocked, true);
+  let state = cuffKeyState();
+  state.chainStrikes = 1;
+  state = act(state, { type: 'view', view: 'dinette' });
+  state.encounter.phase = 'approach'; state.encounter.remaining = 1;
+  state = act(advance(state, 5), { type: 'respond', response: 'shifted' });
+  assert.equal(state.encounter.phase, 'blackout');
+  assert.equal(state.axe, 'stash');
+  assert.equal(state.bobbyPins, 'stash');
+  state = act(act(state, { type: 'wake' }), { type: 'recover' });
+  assert.equal(state.axe, 'inventory');
+  assert.equal(state.finalKey, 'inventory');
 });
 
 test('rummaging every spot is safe and idempotent', () => {
@@ -316,6 +439,8 @@ test('random visits alternate Cletus and Darlene by seed', () => {
       state = advance(state, 6);
     } else if (state.encounter.phase === 'search') {
       state = advance(state, 8);
+    } else if (state.encounter.phase === 'dance') {
+      state = advance(state, DANCE_SECONDS + 6);
     }
     assert.equal(state.encounter.phase, 'idle');
   }
@@ -333,9 +458,9 @@ test('Darlene silent search visit leaves without dialogue', () => {
   state = act(state, { type: 'tick', seconds: 1 });
   assert.equal(state.encounter.phase, 'approach');
   assert.equal(state.encounter.nextVisitor, 'darlene');
-  state = advance(state, 12);
+  state = advance(state, APPROACH_SECONDS);
   assert.equal(state.encounter.phase, 'entering');
-  state = advance(state, 4);
+  state = advance(state, 2);
   assert.equal(state.encounter.phase, 'search');
   state = advance(state, 8);
   assert.equal(state.encounter.phase, 'idle');
