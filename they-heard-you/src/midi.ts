@@ -61,17 +61,32 @@ export function parseMidi(data: ArrayBuffer): MidiNote[] {
     .sort((a, b) => a.time - b.time);
 }
 
-// Per-channel voicing for this arrangement: bass, pad lead, pluck, sci-fi, guitar; channel 10 drums.
-const VOICES: Record<number, { wave: OscillatorType; gain: number; cutoff: number; release: number; detune?: number }> = {
+// Per-channel voicing for an arrangement; channel 10 is always drums.
+type Voice = { wave: OscillatorType; gain: number; cutoff: number; release: number; detune?: number };
+type Voicing = Record<number, Voice>;
+// Goodbye Horses: bass, pad lead, pluck, sci-fi, guitar.
+const VOICES: Voicing = {
   0: { wave: 'sawtooth', gain: 0.2, cutoff: 700, release: 0.08 },
   1: { wave: 'sawtooth', gain: 0.075, cutoff: 2400, release: 0.12, detune: 9 },
   2: { wave: 'square', gain: 0.06, cutoff: 3200, release: 0.05 },
   3: { wave: 'sine', gain: 0.07, cutoff: 5000, release: 0.3 },
   4: { wave: 'triangle', gain: 0.08, cutoff: 2600, release: 0.1 },
 };
+// Fine Again, as a post-grunge band through a cheap boombox: strummed acoustic, crunchy electric,
+// fingered bass, string-pad fills, guitar fills, and the vocal melody carried by a nasal detuned lead.
+export const FINE_AGAIN_VOICES: Voicing = {
+  0: { wave: 'triangle', gain: 0.07, cutoff: 3000, release: 0.22 },
+  2: { wave: 'sawtooth', gain: 0.06, cutoff: 1700, release: 0.08, detune: 14 },
+  4: { wave: 'sawtooth', gain: 0.17, cutoff: 520, release: 0.08 },
+  6: { wave: 'sawtooth', gain: 0.035, cutoff: 1900, release: 0.4, detune: 11 },
+  8: { wave: 'square', gain: 0.045, cutoff: 2100, release: 0.1 },
+  11: { wave: 'sawtooth', gain: 0.085, cutoff: 1500, release: 0.16, detune: 7 },
+};
 
 export class MidiPlayer {
   private notes: MidiNote[] = [];
+  private readonly songs = new Map<string, MidiNote[]>();
+  private voicing: Voicing = VOICES;
   private noise: AudioBuffer | null = null;
   private timer = 0;
   private bus: GainNode | null = null;
@@ -79,18 +94,21 @@ export class MidiPlayer {
 
   constructor(private readonly context: AudioContext, private readonly destination: AudioNode) {}
 
+  // Every song is parsed once and kept, so the dance and the radio can trade places freely.
   async load(url: string): Promise<void> {
-    if (this.notes.length) return;
+    if (this.songs.has(url)) return;
     const response = await fetch(url);
     if (!response.ok) throw new Error('MIDI unavailable');
-    this.notes = parseMidi(await response.arrayBuffer());
+    this.songs.set(url, parseMidi(await response.arrayBuffer()));
   }
 
   get playing(): boolean { return this.bus !== null; }
 
   // Plays `duration` seconds of the song starting at `from` seconds, fading out at the end.
-  play(from: number, duration: number): void {
+  play(url: string, from: number, duration: number, voicing: Voicing = VOICES): void {
     this.stop(0);
+    this.notes = this.songs.get(url) ?? [];
+    this.voicing = voicing;
     const context = this.context;
     const bus = context.createGain();
     const start = context.currentTime + 0.05;
@@ -134,7 +152,7 @@ export class MidiPlayer {
     const context = this.context;
     const velocity = note.velocity / 127;
     if (note.channel === 9) { this.drum(note.note, at, velocity, bus); return; }
-    const spec = VOICES[note.channel] ?? VOICES[4];
+    const spec = this.voicing[note.channel] ?? VOICES[4];
     const frequency = 440 * Math.pow(2, (note.note - 69) / 12);
     const envelope = context.createGain();
     const filter = context.createBiquadFilter();
